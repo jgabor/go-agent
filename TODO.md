@@ -10,14 +10,9 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Initialize Go module as `github.com/jgabor/go-agent`.
 - [x] Establish DX baseline with formatting, linting, local hooks, and Mage gates.
 - [x] Add CI for the canonical `mage check` gate.
+- [x] Lock the first-slice public API contract.
 
 ## Now
-
-- [ ] Lock the first-slice public API contract.
-  - Acceptance: root package exposes plain Go vocabulary for `Agent`, `Runner`, `Tool`, `Session`, `Event`, and `Policy`.
-  - Acceptance: the model turn contract is explicit enough for fake models and provider adapters without making providers the product.
-  - Acceptance: the README quick-start shape is either implemented by the root package or corrected before code depends on it.
-  - Acceptance: exported names have doc comments and compile under `mage check`.
 
 - [ ] Specify runtime behavior with tests before broad implementation.
   - Acceptance: tests cover normal completion, tool call dispatch, tool errors, model errors, cancellation, policy denial, step limit, and stop reasons.

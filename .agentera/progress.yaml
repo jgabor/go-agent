@@ -1,0 +1,17 @@
+cycles:
+  - number: 1
+    timestamp: "2026-05-06 08:13"
+    type: feat
+    phase: build
+    what: Locked the first-slice root API contract.
+    commit: "Pending at log time; commit requested afterward"
+    inspiration: "N/A: contract derived from project vision and TODO acceptance criteria"
+    discovered: README content stays aspirational outside the roadmap unless realized implementation supersedes the aspirational shape.
+    verified: mage check
+    next: Specify runtime behavior with tests before broad implementation.
+    context:
+      intent: Make the highest-priority public API TODO real without adding placeholder runtime code.
+      constraints: Keep the project library-first, provider-neutral, and roadmap-honest while preserving aspirational README sections.
+      unknowns: Exact runtime construction helpers remain deferred to the agent loop slice.
+      scope: Root package contract, compile-time tests, README roadmap, TODO, changelog, and progress log.
+archive: []

@@ -18,6 +18,7 @@
 ## README And Roadmap Hygiene
 
 - Keep detailed contributor, agent, tool-install, and verification instructions in `AGENTS.md`; keep `README.md` focused on product shape, public usage, and high-level contribution entry points.
+- Keep README sections aspirational as if the product vision is fully realized. The Features & Roadmap table is the primary exception; elsewhere, make only surgical edits when realized implementation supersedes the aspirational shape.
 - Do not use the README Features & Roadmap table to document every completed repository setup task. Excluded examples include README publication, `go.mod` initialization, DX baseline setup, and CI setup.
 - Use the roadmap for user-visible or architecture-significant capabilities: public API, runtime loop, tools, streaming, sessions, providers, observability, policy hooks, tests, examples, and explicitly deferred extension surfaces.
 - Keep roadmap statuses aligned with repository reality when product/runtime capabilities start or finish.

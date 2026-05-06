@@ -309,7 +309,7 @@ This table reflects the repository today.
 
 | Area                    | Intended capability                                     | Current status | Evidence                     |
 | ----------------------- | ------------------------------------------------------- | -------------- | ---------------------------- |
-| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Not started    | No Go source exists          |
+| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Started        | Root package contract exists |
 | Agent loop              | Model turn loop with tool dispatch and stop reasons     | Not started    | No runtime code exists       |
 | Tool schemas            | Go function and struct schema support                   | Not started    | No runtime code exists       |
 | Streaming               | Structured event stream for runs                        | Not started    | No runtime code exists       |
@@ -317,7 +317,7 @@ This table reflects the repository today.
 | Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists   |
 | Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists       |
 | Policy hooks            | Approval, limits, validation, and authorization hooks   | Not started    | No runtime code exists       |
-| Tests                   | Unit and integration coverage for runtime behavior      | Not started    | No runtime test files exist  |
+| Tests                   | Unit and integration coverage for runtime behavior      | Started        | API contract tests exist     |
 | Examples                | Minimal app, service, worker, and CLI examples          | Not started    | No examples directory exists |
 | CLI                     | Optional developer CLI around the library               | Deferred       | Library-first direction      |
 | MCP adapter             | Optional adapter package outside the core               | Deferred       | Deliberate non-goal for core |

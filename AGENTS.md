@@ -2,8 +2,8 @@
 
 ## Current Reality
 
-- This repo is pre-implementation. The README quick-start/API examples are aspirational; the Features & Roadmap table is the current source of truth for product/runtime capability status, not completed setup history.
-- There are no Go packages yet. Do not add placeholder runtime code just to make `go test ./...`, `go vet ./...`, `golangci-lint`, or `govulncheck` do work.
+- This repo now has implemented Go runtime packages. README product sections remain partly aspirational; the Features & Roadmap table is the current source of truth for product/runtime capability status, not completed setup history.
+- Do not add placeholder runtime code just to make `go test ./...`, `go vet ./...`, `golangci-lint`, or `govulncheck` do work.
 - Product direction lives in `.agentera/vision.yaml`: library-first Go agent runtime, CLI second, no hosted platform or workflow DSL by default.
 
 ## Commands
@@ -12,7 +12,7 @@
 - List targets: `mage -l`.
 - Full local gate: `mage check`.
 - Focused gates: `mage tidyCheck`, `mage test`, `mage vet`, `mage lint`, `mage vuln`.
-- With no packages, package-dependent Mage targets intentionally print `skip <gate>: no Go packages yet` and succeed.
+- Package-dependent Mage targets run against the implemented Go packages; the empty-package skip behavior remains only as a fallback for future package removal.
 - Local hooks are optional: `lefthook install`. The configured hooks call Mage for Go gates and Prettier for staged Markdown/JSON files.
 
 ## README And Roadmap Hygiene
@@ -39,7 +39,7 @@
 
 ## Contribution Priorities
 
-- Define the smallest public API that satisfies the README quick start.
+- Preserve the smallest public API that satisfies the README quick start.
 - Build tests before broadening features.
 - Keep examples honest and runnable.
 - Resist adding platform features to the core.

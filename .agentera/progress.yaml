@@ -1,4 +1,116 @@
 cycles:
+  - number: 29
+    timestamp: "2026-05-07 00:45"
+    type: docs
+    phase: checkpoint
+    what: Completed Task 7 plan-level freshness checkpoint and closed the runtime depth and test locality plan.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 7 required Agentera state, README roadmap, AGENTS.md, TODO.md, and affected Go package comments to reflect repository reality after Tasks 1-6 passed evaluator review, with no commits and no new production refactors.
+    discovered: AGENTS.md was stale: it still described the repository as pre-implementation, package-empty, and using package-dependent Mage skip behavior as current reality. api.go also had one stale comment saying RetryTargetTool was reserved until policy-visible tool safety metadata existed, even though retry-safe tool retry was implemented in prior tasks. README.md roadmap already reflected current product/runtime capability status without setup bookkeeping, TODO.md only needed this plan checkpoint recorded, and no additional Go package comment drift was found.
+    verified: Task 7 reviewed .agentera/plan.yaml, .agentera/progress.yaml, README.md, AGENTS.md, TODO.md, doc.go, api.go, tool.go, runner.go, session.go, and providers/openai/openai.go. Freshness edits updated AGENTS.md current reality and Mage package-gate guidance, TODO.md done backlog, and the RetryTargetTool comment in api.go. No README roadmap edit was necessary because the table already lists user-visible and architecture-significant capabilities as Started/Deferred/Won't fix and avoids repository setup detail. Full local gate passed with command `mage check`; output was `ok github.com/jgabor/go-agent (cached)`, `ok github.com/jgabor/go-agent/examples/cli (cached)`, `? github.com/jgabor/go-agent/examples/minimal [no test files]`, `ok github.com/jgabor/go-agent/examples/service (cached)`, `ok github.com/jgabor/go-agent/examples/worker (cached)`, `ok github.com/jgabor/go-agent/providers/openai (cached)`, `0 issues.`, and `No vulnerabilities found.`
+    next: Overall plan is closed; no provider registry, product shell, auth/settings/prompts/resources/UI/CLI/MCP/sub-agent/workflow DSL, or new production refactor work was started.
+    context:
+      intent: Close the plan only after repository guidance and Agentera artifacts matched the implemented runtime state and verification passed.
+      constraints: Task 7 only; freshness documentation/state edits only; no production refactors except comment correction; preserve library-first runtime scope; do not commit.
+      scope: Agentera plan/progress closure, AGENTS.md current-reality guidance, TODO checkpoint entry, one Go API comment correction, and full `mage check` verification evidence.
+  - number: 28
+    timestamp: "2026-05-07 01:20"
+    type: refactor
+    phase: build
+    what: Completed Task 6 by deepening tool execution and retry-safety locality without changing public Tool or Runner behavior.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 6 required tool input decoding, timeout, output-limit, returned-error, retry-safe, unsafe, constrained, and policy-denied behavior to remain baseline-compatible while tool execution/retry-safety rules stopped living as Runner-specific duplication.
+    discovered: The remaining locality gap was concrete: functionTool.Call mixed runtime execution concerns with authoring/schema code, and Runner owned the tool retry operation setup. The smallest safe change was a new internal tool_execution.go locality for function execution, input decoding, constraints, and registered-tool retry classification, while keeping runRetryOperation as the single retry state machine and keeping Runner responsible only for orchestration, policy decisions, event emission, and session updates.
+    verified: tool_execution.go now contains functionTool.Call, executeFunctionTool, input decoding, timeout/max-output enforcement, and registeredTool.callWithRetry. runner.go now delegates tool retry classification to registeredTool.callWithRetry, so retry-safe eligibility, RetryTargetTool construction, RetryReasonToolError, RetryReasonToolRetryBlocked, StopToolError, and cached ToolSpec propagation are local to tool execution rather than duplicated in the Runner tool-call path. retry_test.go adds TestRunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext, covering retry-safe input decoding failure, tool-local timeout failure, and max-output failure; the test proves policy-visible retry decisions carry the cached weather ToolSpec safety metadata, ToolCall ID, RetryTargetTool name/path, triggering error text, constrained/exhausted retry outcomes, and no function invocation for decode failures. Existing retry tests continue to prove safe returned-error retry success, unsafe blocked retry with no DecisionRetry, policy-denied retry, and constrained retry exhaustion. Focused gate passed: go test ./... -run 'Test(FunctionTool|NewTool|ToolDefinition|RunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext|RunnerRetriesSafeToolFailureWithPolicyContextAndEvents|RunnerBlocksUnsafeToolRetryByDefault|RunnerToolRetry|RetrySemanticsExposeTargetAttemptsDelaysAndStops)'. Full gates passed: go test ./...; mage check.
+    next: Task 7 plan-level freshness checkpoint remains pending; no provider/session/facade/product-shell work was started.
+    context:
+      intent: Improve tool execution and retry-safety locality behind existing Tool, Runner, Policy, Event, and retry seams while preserving the Task 1 compatibility baseline and Task 3 retry state-machine semantics.
+      constraints: Task 6 only; no public API additions; no provider/session/facade broadening; preserve cached metadata/schema cloning from Task 5 and event construction from Task 4; do not commit.
+      scope: Internal tool execution locality file, Runner delegation for registered-tool retry classification, focused retry-safe execution failure tests, Task 6 plan status/evidence, progress log, and verification.
+  - number: 27
+    timestamp: "2026-05-07 00:36"
+    type: fix
+    phase: retry
+    what: Retried Task 5 after evaluator found cached ToolSpec.Schema mutation could leak from model-visible TurnRequest.Tools into later policy and event metadata.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 5 metadata locality must keep NewRunner's construction-time metadata cache without making the cached ToolSpec schema map observable or mutable through model, policy, or event surfaces.
+    discovered: The locality refactor cached ToolSpec correctly, but exposed only shallow copies. Because ToolSchema is a map and schemas can contain nested maps/slices, TurnRequest.Tools, callTool's cached registered spec, policy decisions, and event payloads needed defensive ToolSpec/schema cloning at exposure seams rather than runtime rediscovery.
+    verified: tool.go now deep-clones ToolSchema maps, nested map[string]any values, []any values, and []string values. runner.go now clones cached ToolSpec values for TurnRequest.Tools, per-call registered tool metadata, policy decision inputs, event Tool fields, event Decision.Tool/Retry.Tool fields, and registry snapshots while preserving the single NewRunner metadata cache. runner_test.go adds TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns, which mutates TurnRequest.Tools[0].Schema top-level and nested maps inside the model and proves policy metadata, tool-call/tool-result/policy events, and a later run still see the original schema. Focused gate passed: go test ./... -run 'TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns|TestRunnerUsesRegisteredToolMetadataWithoutRediscovery|TestRunnerExposesAdvancedToolDefinitionMetadata|TestNewTool|TestToolDefinition|TestFunctionTool'. Full gates passed after gofumpt formatting: go test ./...; mage check.
+    next: Task 6 remains pending; no tool execution or retry-safety deepening was started in this retry cycle.
+    context:
+      intent: Close the evaluator's schema mutation hole while preserving Task 5's metadata locality and public API compatibility.
+      constraints: No public API changes; no scattered runtime metadata rediscovery; no Task 6 execution/retry-safety work; do not commit.
+      scope: Defensive ToolSpec/ToolSchema cloning in tool.go and runner.go, focused regression coverage in runner_test.go, Task 5 evidence refresh, progress log, and verification.
+  - number: 26
+    timestamp: "2026-05-07 00:58"
+    type: refactor
+    phase: build
+    what: Completed Task 5 by deepening tool authoring and metadata locality without changing public tool behavior.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 5 required NewTool, NewToolWithSchema, and NewToolFromDefinition metadata to remain baseline-compatible while Runner stopped rediscovering names, descriptions, schemas, safety, and constraints through scattered optional behavior.
+    discovered: The remaining locality gap was small and concrete: functionTool kept authoring metadata as separate fields, and Runner built model-visible ToolSpec values during construction but recomputed tool metadata again for each tool call. No new public API was needed; the fix is one internal ToolSpec on authored function tools plus one registeredTool catalog built by NewRunner.
+    verified: tool.go now stores name, description, schema, safety, and constraints for authored tools in one internal ToolSpec while preserving Tool.Name, Tool.Description, Tool.Schema, Tool.Metadata, timeout, max-output, decoding, execution, and error behavior. runner.go now builds a registeredTool registry once in NewRunner, keeps the model-facing ToolSpec slice from that registry, and reuses cached ToolSpec values for DecisionToolCall, DecisionToolResult, DecisionRetry, EventToolCall, EventToolResult, EventRetry, and EventError payloads. runner_test.go adds TestRunnerUsesRegisteredToolMetadataWithoutRediscovery, proving optional Metadata is read once during NewRunner registration and not during Run while model, policy, and event surfaces still receive safety and constraint metadata. tool_test.go adds TestNewToolReportsSchemaDerivationMismatchPrecisely, and existing tool_test.go coverage continues to lock invalid name, empty description, nil/explicit schema errors, unsupported function shape, negative timeout, negative max output, output-limit, input-decoding, and wrapped tool errors. Focused gate passed: go test ./... -run 'TestNewTool|TestToolDefinition|TestFunctionTool|TestRunnerExposesAdvancedToolDefinitionMetadata|TestRunnerUsesRegisteredToolMetadataWithoutRediscovery|TestRunnerExecutesToolAndFeedsResultBackToModel'. Full gates passed: go test ./...; mage check.
+    next: Task 6 may deepen tool execution and retry-safety behavior; no Task 6 execution/retry-safety changes were started in this cycle.
+    context:
+      intent: Improve tool authoring and runtime metadata locality behind existing Tool and Runner seams while preserving the Task 1 compatibility baseline.
+      constraints: Task 5 only; no public Agent, Runner, Tool, Session, Event, or Policy vocabulary changes; no Task 6 execution/retry-safety deepening beyond preserving current metadata, retry, and event behavior; no product shell/provider registry/auth/settings/prompts/resources/UI/CLI/MCP/sub-agent/workflow DSL; do not commit.
+      scope: tool.go internal authored tool metadata representation, runner.go internal tool registry metadata cache, focused runner metadata regression test, Task 5 plan status/evidence, progress log, and verification.
+  - number: 25
+    timestamp: "2026-05-07 00:45"
+    type: refactor
+    phase: build
+    what: Completed Task 4 by deepening runtime history and event construction locality without changing public Event behavior.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 4 required Run, Stream, and EventSink history to remain baseline-compatible for ordering, RunID, TurnID, ToolCallID, stop reasons, errors, retry data, and final result linkage while reducing scattered Event field assembly in runner.go.
+    discovered: Event sequencing, RunID assignment, sink fanout, and result snapshots already had one delivery path, but individual event payloads were still assembled inline across model, tool, retry, policy, error, and stop paths. The smallest safe locality improvement was internal runState semantic event helpers plus one eventPayload-to-Event conversion point, leaving public Event, Runner, Agent, Tool, Session, and Policy vocabulary unchanged.
+    verified: runner.go now routes text_delta, tool_call, tool_result, policy_decision, retry, error, and stop construction through runState helpers and a single eventPayload conversion before sequence/RunID assignment, Run/Stream emission, sink notification, and result-history capture. event_history_test.go adds TestRuntimeHistoryCorrelatesRunStreamSinkAndFinalResult, TestRuntimeHistorySinkPanicStaysObservational, and TestRuntimeHistoryTerminalEventsAreReconstructable, covering Run/Stream/sink parity, event order, RunID, TurnID, ToolCallID, retry target/outcome linkage, policy/tool/text/stop payloads, final result linkage, panic-isolated sinks, and terminal error reconstruction. Focused gate passed: go test ./... -run 'TestRuntimeHistory|TestRuntimeBehavior|TestStream|TestRetry'. Full gates passed: go test ./...; mage check.
+    next: Task 5 may deepen tool authoring and metadata locality; no Task 5 implementation was started in this cycle.
+    context:
+      intent: Improve runtime history/event construction locality behind existing public seams while preserving Task 1 baseline compatibility and Task 3 retry semantics.
+      constraints: Task 4 only; no public API additions; preserve Agent, Runner, Tool, Session, Event, and Policy vocabulary; keep event sinks observational and panic-isolated; no Task 5/6 tool authoring or execution deepening beyond preserving event payload compatibility; do not commit.
+      scope: runner.go internal event construction helpers, focused event-history tests, Task 4 plan status/evidence, progress log, and verification.
+  - number: 24
+    timestamp: "2026-05-07 00:32"
+    type: refactor
+    phase: build
+    what: Completed Task 3 by deepening policy-visible retry locality without changing public retry behavior.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 3 required model turn, session-store load, and retry-safe tool execution failures to keep baseline policy-visible decisions and reconstructable retry events while reducing duplicated retry state-machine logic in runner.go.
+    discovered: The repeated retry loops shared the same failed, considered, denied, constrained, exhausted, canceled, attempted, and succeeded transitions. The smallest safe change was one internal generic runRetryOperation helper configured by target-specific metadata rather than a public API reshaping. Unknown tools, policy denial, cancellation before model work, step limit, unsafe tool retry blocking, and event sink panics remain outside retry execution.
+    verified: runner.go now routes model, runtime/session-load, and tool retry through one internal retryOperation state machine while preserving public RetryTarget, RetryReason, RetryContext, EventRetry, EventPolicyDecision, ToolCall, ToolSpec, TurnID, Delay, and StopReason fields. retry_test.go adds TestRetrySemanticsExposeTargetAttemptsDelaysAndStops, TestRetryCancellationDuringDelayIsReconstructable, and TestRetryEnabledDoesNotRetryEventSinkFailure so target, attempt, outcome, delay, stop, and non-target semantics fail directly when retry rules change. Existing runtime_baseline_test.go continues to lock non-target classifications for unknown tools, policy denial, cancellation, and step limit. Focused gate passed: go test ./... -run 'TestRetry|TestRuntimeBaseline'. Full gates passed: go test ./...; mage check.
+    next: Task 4 may deepen runtime history and event construction; no Task 4 implementation was started in this cycle.
+    context:
+      intent: Improve retry semantics locality behind existing Runner seams while preserving Task 1 baseline compatibility.
+      constraints: Task 3 only; no public Agent, Runner, Tool, Session, Event, or Policy vocabulary changes; no Task 4 event-history work beyond retry event assertions; no product shell/provider registry/auth/settings/prompts/resources/UI/CLI/MCP/sub-agent/workflow DSL; do not commit.
+      scope: runner.go retry helper extraction, focused retry semantic tests, Task 3 plan status/evidence, progress log, and verification.
+  - number: 23
+    timestamp: "2026-05-07 00:20"
+    type: test
+    phase: build
+    what: Completed Task 2 by replacing the scripted runtime behavior specification with production Runner scenarios.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 2 required runtime behavior scenarios to exercise the real Runner interface and production event ordering/correlation instead of a parallel test-only agent loop.
+    discovered: The legacy scriptedRuntime duplicated model turn dispatch, tool execution, policy decisions, step limits, stop handling, and event sequencing. Porting the policy-denial scenario to NewRunner preserved the Task 1 surprise: explicit denyAllPolicy is applied at DecisionRunStart, so the real Runner stops before model work and emits a run-start policy decision rather than a tool-call policy denial.
+    verified: Removed scriptedRuntime, scriptedModel, scriptedTool, scriptedTurn, toolSpecs, and test-local toolSpec from runtime_behavior_test.go. TestRuntimeBehaviorSpecification now builds a real Runner per scenario with recordingModel/namedTool/denyAllPolicy seam adapters for normal completion, tool dispatch, tool error, model error, cancellation, run-start policy denial, and step limit; cancellation and policy denial assert no model turn occurred. TestRuntimeBehaviorStreamUsesRunnerEvents asserts Stream event ordering and correlation from the production Runner. Focused gate passed: go test ./... -run 'TestRuntimeBehaviorSpecification|TestRuntimeBehaviorStreamUsesRunnerEvents'. Full gate passed: mage check.
+    next: Task 3 may deepen policy-visible retry behavior; no Task 3 implementation was started in this cycle.
+    context:
+      intent: Remove false confidence from duplicate runtime tests while preserving current production behavior.
+      constraints: Task 2 only; prefer test changes; no intentional production behavior changes; preserve Agent, Runner, Tool, Session, Event, Policy vocabulary; no product shell/provider registry/auth/settings/prompts/resources/UI/CLI/MCP/sub-agent/workflow DSL; do not commit.
+      scope: runtime behavior tests, Task 2 plan status/evidence, progress log, and verification.
+  - number: 22
+    timestamp: "2026-05-07 00:14"
+    type: test
+    phase: build
+    what: Completed Task 1 runtime compatibility baseline characterization.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 1 required existing Run, Stream, retry, tools, policy, sessions, and event sink behavior to be covered or explicitly gapped before any behavior-changing runtime depth work begins.
+    discovered: Existing tests already covered most public behavior. The missing baseline was an explicit retry-enabled classification of retry targets versus terminal non-targets, plus the session-store load exhaustion shape. A surprise appeared: the legacy scripted runtime test treats denyAllPolicy as a tool-call denial after a model turn, while the real Runner consults explicit policy at run start and stops before model work.
+    verified: Added runtime_baseline_test.go. go test ./... passed after the baseline classified model turns, session-store loads, and retry-safe tools as retry targets; unknown tools, tool-call policy denial, cancellation, and step limits as terminal non-targets with no retry events; and session-store load retry exhaustion as returning a StopRetryExhausted result snapshot plus the store error. Existing observability tests verify event sinks are observational adapters through Run/Stream observation and panic isolation. mage check was run for the full local gate and passed. Artifact hygiene note: .agentera/archive/plan-2026-05-06-runtime-ergonomics-and-tooling.yaml already existed from the immediately preceding planera step before Task 1 began, was not created or modified by Task 1, and remains intentionally untracked.
+    next: Task 2 may replace scripted runtime scenarios with real Runner scenarios; no Task 2 implementation was started in this cycle.
+    context:
+      intent: Lock down current public runtime behavior as a compatibility baseline before deeper runtime-locality changes.
+      constraints: Baseline characterization only; no intentional production behavior changes; preserve library-first vocabulary; do not add product shell/provider registry/auth/settings/prompts/resources/UI/CLI/MCP/sub-agent/workflow DSL behavior; do not commit.
+      scope: Focused runtime baseline tests, Task 1 plan baseline notes/status, surprise recording, progress log, and verification.
   - number: 21
     timestamp: "2026-05-06 22:23"
     type: docs

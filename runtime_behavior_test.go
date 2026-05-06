@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -18,22 +17,19 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 		name       string
 		ctx        context.Context
 		request    goagent.RunRequest
-		runtime    *scriptedRuntime
+		agent      goagent.Agent
 		wantStop   goagent.StopReason
 		wantEvents []goagent.EventKind
+		assert     func(*testing.T, goagent.RunResult, goagent.Agent)
 	}{
 		{
 			name:    "normal completion",
 			ctx:     context.Background(),
 			request: goagent.RunRequest{Input: "Should I bring a jacket?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{{result: goagent.TurnResult{
-					Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "Bring a jacket."},
-					StopReason: goagent.StopComplete,
-				}}},
-				scriptedTool{},
-				allowAllPolicy,
-			),
+			agent: goagent.Agent{Model: &recordingModel{turns: []goagent.TurnResult{{
+				Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "Bring a jacket."},
+				StopReason: goagent.StopComplete,
+			}}}},
 			wantStop:   goagent.StopComplete,
 			wantEvents: []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop},
 		},
@@ -41,17 +37,16 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			name:    "tool call dispatch",
 			ctx:     context.Background(),
 			request: goagent.RunRequest{Input: "Weather in Austin?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{
-					{result: goagent.TurnResult{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}},
-					{result: goagent.TurnResult{
+			agent: goagent.Agent{
+				Model: &recordingModel{turns: []goagent.TurnResult{
+					{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}},
+					{
 						Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "Clear in Austin."},
 						StopReason: goagent.StopComplete,
-					}},
-				},
-				scriptedTool{},
-				allowAllPolicy,
-			),
+					},
+				}},
+				Tools: []goagent.Tool{namedTool{name: "weather"}},
+			},
 			wantStop: goagent.StopComplete,
 			wantEvents: []goagent.EventKind{
 				goagent.EventToolCall,
@@ -65,11 +60,10 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			name:    "tool error",
 			ctx:     context.Background(),
 			request: goagent.RunRequest{Input: "Weather in Austin?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{{result: goagent.TurnResult{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}}},
-				scriptedTool{err: errors.New("tool failed")},
-				allowAllPolicy,
-			),
+			agent: goagent.Agent{
+				Model: &recordingModel{turns: []goagent.TurnResult{{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}}},
+				Tools: []goagent.Tool{namedTool{name: "weather", err: errors.New("tool failed")}},
+			},
 			wantStop: goagent.StopToolError,
 			wantEvents: []goagent.EventKind{
 				goagent.EventToolCall,
@@ -79,60 +73,67 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			},
 		},
 		{
-			name:    "model error",
-			ctx:     context.Background(),
-			request: goagent.RunRequest{Input: "Weather in Austin?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{{err: errors.New("model failed")}},
-				scriptedTool{},
-				allowAllPolicy,
-			),
+			name:       "model error",
+			ctx:        context.Background(),
+			request:    goagent.RunRequest{Input: "Weather in Austin?"},
+			agent:      goagent.Agent{Model: &recordingModel{err: errors.New("model failed")}},
 			wantStop:   goagent.StopModelError,
 			wantEvents: []goagent.EventKind{goagent.EventError, goagent.EventStop},
 		},
 		{
-			name:    "cancellation",
-			ctx:     canceledContext(),
-			request: goagent.RunRequest{Input: "Weather in Austin?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{{result: goagent.TurnResult{Message: goagent.Message{Content: "unreached"}}}},
-				scriptedTool{},
-				allowAllPolicy,
-			),
+			name:       "cancellation",
+			ctx:        canceledContext(),
+			request:    goagent.RunRequest{Input: "Weather in Austin?"},
+			agent:      goagent.Agent{Model: &recordingModel{turns: []goagent.TurnResult{{Message: goagent.Message{Content: "unreached"}}}}},
 			wantStop:   goagent.StopCanceled,
 			wantEvents: []goagent.EventKind{goagent.EventError, goagent.EventStop},
+			assert: func(t *testing.T, _ goagent.RunResult, agent goagent.Agent) {
+				t.Helper()
+				model := agent.Model.(*recordingModel)
+				if len(model.requests) != 0 {
+					t.Fatalf("model turns = %d, want 0", len(model.requests))
+				}
+			},
 		},
 		{
-			name:    "policy denial",
+			name:    "run start policy denial",
 			ctx:     context.Background(),
 			request: goagent.RunRequest{Input: "Weather in Austin?"},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{{result: goagent.TurnResult{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}}},
-				scriptedTool{},
-				denyAllPolicy,
-			),
+			agent: goagent.Agent{
+				Model:  &recordingModel{turns: []goagent.TurnResult{{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}}},
+				Tools:  []goagent.Tool{namedTool{name: "weather"}},
+				Policy: denyAllPolicy,
+			},
 			wantStop: goagent.StopPolicyDenied,
 			wantEvents: []goagent.EventKind{
-				goagent.EventToolCall,
 				goagent.EventPolicyDecision,
 				goagent.EventStop,
+			},
+			assert: func(t *testing.T, result goagent.RunResult, agent goagent.Agent) {
+				t.Helper()
+				if result.Events[0].Decision.Kind != goagent.DecisionRunStart {
+					t.Fatalf("first policy decision kind = %q, want %q", result.Events[0].Decision.Kind, goagent.DecisionRunStart)
+				}
+				model := agent.Model.(*recordingModel)
+				if len(model.requests) != 0 {
+					t.Fatalf("model turns = %d, want 0", len(model.requests))
+				}
 			},
 		},
 		{
 			name:    "step limit",
 			ctx:     context.Background(),
 			request: goagent.RunRequest{Input: "Weather in Austin?", MaxSteps: 1},
-			runtime: newScriptedRuntime(
-				[]scriptedTurn{
-					{result: goagent.TurnResult{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}},
-					{result: goagent.TurnResult{
+			agent: goagent.Agent{
+				Model: &recordingModel{turns: []goagent.TurnResult{
+					{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}},
+					{
 						Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "unreached"},
 						StopReason: goagent.StopComplete,
-					}},
-				},
-				scriptedTool{},
-				allowAllPolicy,
-			),
+					},
+				}},
+				Tools: []goagent.Tool{namedTool{name: "weather"}},
+			},
 			wantStop: goagent.StopStepLimit,
 			wantEvents: []goagent.EventKind{
 				goagent.EventToolCall,
@@ -145,7 +146,12 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.runtime.Run(tt.ctx, tt.request)
+			runner, err := goagent.NewRunner(tt.agent)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := runner.Run(tt.ctx, tt.request)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,8 +160,33 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			}
 			assertEventKinds(t, result.Events, tt.wantEvents)
 			assertOrderedCorrelatedEvents(t, result.Events)
+			if tt.assert != nil {
+				tt.assert(t, result, tt.agent)
+			}
 		})
 	}
+}
+
+func TestRuntimeBehaviorStreamUsesRunnerEvents(t *testing.T) {
+	runner, err := goagent.NewRunner(goagent.Agent{Model: &recordingModel{turns: []goagent.TurnResult{{
+		Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "Bring a jacket."},
+		StopReason: goagent.StopComplete,
+	}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := runner.Stream(context.Background(), goagent.RunRequest{Input: "Should I bring a jacket?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []goagent.Event
+	for event := range events {
+		got = append(got, event)
+	}
+	assertEventKinds(t, got, []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop})
+	assertOrderedCorrelatedEvents(t, got)
 }
 
 func TestRetrySemanticsAreStartedInRoadmap(t *testing.T) {
@@ -176,148 +207,6 @@ func TestRetrySemanticsAreStartedInRoadmap(t *testing.T) {
 		}
 	}
 }
-
-type scriptedRuntime struct {
-	runID  string
-	model  *scriptedModel
-	tools  map[string]goagent.Tool
-	policy goagent.Policy
-}
-
-func newScriptedRuntime(turns []scriptedTurn, tool goagent.Tool, policy goagent.Policy) *scriptedRuntime {
-	return &scriptedRuntime{
-		runID:  "run-1",
-		model:  &scriptedModel{turns: turns},
-		tools:  map[string]goagent.Tool{tool.Name(): tool},
-		policy: policy,
-	}
-}
-
-func (r *scriptedRuntime) Run(ctx context.Context, request goagent.RunRequest) (goagent.RunResult, error) {
-	var (
-		events  []goagent.Event
-		seq     int64
-		text    string
-		step    int
-		message = goagent.Message{Role: goagent.RoleUser, Content: request.Input}
-	)
-
-	emit := func(event goagent.Event) {
-		seq++
-		event.Sequence = seq
-		event.RunID = r.runID
-		events = append(events, event)
-	}
-	finish := func(reason goagent.StopReason) (goagent.RunResult, error) {
-		emit(goagent.Event{Kind: goagent.EventStop, StopReason: reason})
-		return goagent.RunResult{Text: text, StopReason: reason, Events: events}, nil
-	}
-	fail := func(kind goagent.StopReason, event goagent.Event) (goagent.RunResult, error) {
-		event.Kind = goagent.EventError
-		emit(event)
-		return finish(kind)
-	}
-
-	for {
-		if err := ctx.Err(); err != nil {
-			return fail(goagent.StopCanceled, goagent.Event{Err: err})
-		}
-		if request.MaxSteps > 0 && step >= request.MaxSteps {
-			return finish(goagent.StopStepLimit)
-		}
-
-		step++
-		turnID := fmt.Sprintf("turn-%d", step)
-		turn, err := r.model.Turn(ctx, goagent.TurnRequest{
-			Messages: []goagent.Message{message},
-			Tools:    toolSpecs(r.tools),
-			Session:  request.Session,
-		})
-		if err != nil {
-			return fail(goagent.StopModelError, goagent.Event{TurnID: turnID, Err: err})
-		}
-
-		for _, call := range turn.ToolCalls {
-			emit(goagent.Event{Kind: goagent.EventToolCall, TurnID: turnID, ToolCallID: call.ID, ToolCall: call})
-
-			decision, err := r.policy.Decide(ctx, goagent.Decision{ToolCall: call, Tool: toolSpec(r.tools[call.Name])})
-			if err != nil {
-				return fail(goagent.StopPolicyDenied, goagent.Event{TurnID: turnID, ToolCallID: call.ID, Err: err})
-			}
-			emit(goagent.Event{Kind: goagent.EventPolicyDecision, TurnID: turnID, ToolCallID: call.ID})
-			if !decision.Allowed {
-				return finish(goagent.StopPolicyDenied)
-			}
-
-			result, err := r.tools[call.Name].Call(ctx, call)
-			if err != nil {
-				return fail(goagent.StopToolError, goagent.Event{TurnID: turnID, ToolCallID: call.ID, Err: err})
-			}
-			emit(goagent.Event{Kind: goagent.EventToolResult, TurnID: turnID, ToolCallID: call.ID, ToolResult: result})
-		}
-
-		if turn.Message.Content != "" {
-			text += turn.Message.Content
-			emit(goagent.Event{Kind: goagent.EventTextDelta, TurnID: turnID, Text: turn.Message.Content, Message: turn.Message})
-		}
-		if len(turn.ToolCalls) == 0 {
-			if turn.StopReason == "" {
-				turn.StopReason = goagent.StopComplete
-			}
-			return finish(turn.StopReason)
-		}
-	}
-}
-
-func (r *scriptedRuntime) Stream(context.Context, goagent.RunRequest) (<-chan goagent.Event, error) {
-	panic("streaming behavior is specified by event ordering, not this test helper")
-}
-
-type scriptedTurn struct {
-	result goagent.TurnResult
-	err    error
-}
-
-type scriptedModel struct {
-	turns []scriptedTurn
-	next  int
-}
-
-func (m *scriptedModel) Turn(context.Context, goagent.TurnRequest) (goagent.TurnResult, error) {
-	if m.next >= len(m.turns) {
-		return goagent.TurnResult{}, errors.New("unexpected model turn")
-	}
-	turn := m.turns[m.next]
-	m.next++
-	return turn.result, turn.err
-}
-
-type scriptedTool struct {
-	err error
-}
-
-func (scriptedTool) Name() string { return "weather" }
-
-func (scriptedTool) Description() string { return "Get weather for a city." }
-
-func (scriptedTool) Schema() goagent.ToolSchema { return goagent.ToolSchema{"type": "object"} }
-
-func (t scriptedTool) Call(_ context.Context, call goagent.ToolCall) (goagent.ToolResult, error) {
-	if t.err != nil {
-		return goagent.ToolResult{}, t.err
-	}
-	var input struct {
-		City string `json:"city"`
-	}
-	if err := json.Unmarshal(call.Input, &input); err != nil {
-		return goagent.ToolResult{}, err
-	}
-	return goagent.ToolResult{CallID: call.ID, Name: call.Name, Content: "clear in " + input.City}, nil
-}
-
-var allowAllPolicy = goagent.PolicyFunc(func(context.Context, goagent.Decision) (goagent.PolicyDecision, error) {
-	return goagent.PolicyDecision{Allowed: true}, nil
-})
 
 var denyAllPolicy = goagent.PolicyFunc(func(context.Context, goagent.Decision) (goagent.PolicyDecision, error) {
 	return goagent.PolicyDecision{Allowed: false, Reason: "denied by test policy"}, nil
@@ -370,26 +259,14 @@ func assertOrderedCorrelatedEvents(t *testing.T, events []goagent.Event) {
 				t.Fatalf("tool call event %d is not correlated: %+v", i, event)
 			}
 			toolCalls[event.ToolCallID] = true
-		case goagent.EventPolicyDecision, goagent.EventToolResult:
+		case goagent.EventPolicyDecision:
+			if event.ToolCallID != "" && !toolCalls[event.ToolCallID] {
+				t.Fatalf("event %d references unknown tool call %q", i, event.ToolCallID)
+			}
+		case goagent.EventToolResult:
 			if !toolCalls[event.ToolCallID] {
 				t.Fatalf("event %d references unknown tool call %q", i, event.ToolCallID)
 			}
 		}
-	}
-}
-
-func toolSpecs(tools map[string]goagent.Tool) []goagent.ToolSpec {
-	specs := make([]goagent.ToolSpec, 0, len(tools))
-	for _, tool := range tools {
-		specs = append(specs, toolSpec(tool))
-	}
-	return specs
-}
-
-func toolSpec(tool goagent.Tool) goagent.ToolSpec {
-	return goagent.ToolSpec{
-		Name:        tool.Name(),
-		Description: tool.Description(),
-		Schema:      tool.Schema(),
 	}
 }

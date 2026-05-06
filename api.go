@@ -336,7 +336,7 @@ const (
 	RetryTargetModel RetryTargetKind = "model"
 	// RetryTargetRuntime identifies a runtime-owned operation retry.
 	RetryTargetRuntime RetryTargetKind = "runtime"
-	// RetryTargetTool is reserved until policy-visible tool safety metadata exists.
+	// RetryTargetTool identifies a retry-safe tool call retry.
 	RetryTargetTool RetryTargetKind = "tool"
 )
 

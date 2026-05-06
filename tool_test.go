@@ -139,6 +139,24 @@ func TestNewToolWithSchemaUsesExplicitSchema(t *testing.T) {
 	}
 }
 
+func TestNewToolReportsSchemaDerivationMismatchPrecisely(t *testing.T) {
+	type invalidInput struct {
+		Unsupported chan string `json:"unsupported"`
+	}
+
+	_, err := goagent.NewTool("weather", "Get weather.", func(context.Context, invalidInput) (string, error) {
+		return "ok", nil
+	})
+	if err == nil {
+		t.Fatal("NewTool succeeded with unsupported schema field")
+	}
+	for _, want := range []string{"tool \"weather\"", "field Unsupported", "unsupported schema type chan string"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err, want)
+		}
+	}
+}
+
 func TestNewToolFromDefinitionCarriesRuntimeMetadata(t *testing.T) {
 	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
 		Name:        "weather",

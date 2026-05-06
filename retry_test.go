@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -221,6 +222,96 @@ func TestRunnerBlocksUnsafeToolRetryByDefault(t *testing.T) {
 	}
 }
 
+func TestRunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       json.RawMessage
+		constraints goagent.ToolConstraints
+		fn          func(context.Context, string) (string, error)
+		wantErr     string
+		wantCalls   int
+	}{
+		{
+			name:      "input decoding",
+			input:     json.RawMessage(`{"city":72}`),
+			fn:        func(context.Context, string) (string, error) { return "unreached", nil },
+			wantErr:   "input value must be a string",
+			wantCalls: 0,
+		},
+		{
+			name:        "timeout",
+			input:       json.RawMessage(`{"city":"Austin"}`),
+			constraints: goagent.ToolConstraints{Timeout: time.Millisecond},
+			fn: func(ctx context.Context, _ string) (string, error) {
+				<-ctx.Done()
+				return "", ctx.Err()
+			},
+			wantErr:   "context deadline exceeded",
+			wantCalls: 1,
+		},
+		{
+			name:        "max output",
+			input:       json.RawMessage(`{"city":"Austin"}`),
+			constraints: goagent.ToolConstraints{MaxOutputBytes: 3},
+			fn:          func(context.Context, string) (string, error) { return "clear", nil },
+			wantErr:     "max output bytes",
+			wantCalls:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := &flakyModel{turns: []goagent.TurnResult{{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: tt.input}}}}}
+			var calls int
+			tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+				Name:        "weather",
+				Description: "Get weather.",
+				Schema:      goagent.ToolSchema{"type": "object"},
+				Function: func(ctx context.Context, input string) (string, error) {
+					calls++
+					return tt.fn(ctx, input)
+				},
+				Safety:      goagent.ToolSafety{ReadOnly: true, Retryable: true},
+				Constraints: tt.constraints,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var retryDecision goagent.RetryContext
+			policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+				if decision.Kind == goagent.DecisionRetry {
+					retryDecision = decision.Retry
+					if decision.Tool.Name != "weather" || !decision.Tool.Safety.Retryable || !decision.Tool.Safety.ReadOnly || decision.ToolCall.ID != "call-1" {
+						t.Fatalf("retry decision missing safe tool context: %+v", decision)
+					}
+					return goagent.PolicyDecision{Allowed: true, Retry: goagent.RetryPolicy{MaxAttempts: 1}}, nil
+				}
+				return goagent.PolicyDecision{Allowed: true}, nil
+			})
+			runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result.StopReason != goagent.StopRetryExhausted || calls != tt.wantCalls {
+				t.Fatalf("result=%+v calls=%d, want calls=%d", result, calls, tt.wantCalls)
+			}
+			if retryDecision.Target.Kind != goagent.RetryTargetTool || retryDecision.Target.ToolName != "weather" || retryDecision.ToolCall.ID != "call-1" || retryDecision.Tool.Name != "weather" {
+				t.Fatalf("retry context = %+v", retryDecision)
+			}
+			if retryDecision.Err == nil || !strings.Contains(retryDecision.Err.Error(), tt.wantErr) {
+				t.Fatalf("retry error = %v, want %q", retryDecision.Err, tt.wantErr)
+			}
+			assertRetryOutcomes(t, result.Events, []goagent.RetryOutcome{goagent.RetryOutcomeFailed, goagent.RetryOutcomeConsidered, goagent.RetryOutcomeConstrained, goagent.RetryOutcomeExhausted})
+		})
+	}
+}
+
 func TestRunnerToolRetryPolicyDenialStopsExplicitly(t *testing.T) {
 	toolErr := errors.New("tool failed")
 	model := &flakyModel{turns: []goagent.TurnResult{{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}}}}
@@ -277,6 +368,139 @@ func TestRunnerToolRetryPolicyConstraintCanExhaustBeforeRetry(t *testing.T) {
 	exhausted := retryEventWithOutcome(result.Events, goagent.RetryOutcomeExhausted)
 	if exhausted.Retry.StopReason != goagent.StopRetryExhausted || exhausted.ToolCall.ID != "call-1" {
 		t.Fatalf("exhausted retry event = %+v", exhausted)
+	}
+}
+
+func TestRetrySemanticsExposeTargetAttemptsDelaysAndStops(t *testing.T) {
+	t.Run("model retry succeeds", func(t *testing.T) {
+		modelErr := errors.New("model unavailable")
+		model := &flakyModel{errors: []error{modelErr}, turns: []goagent.TurnResult{{Message: goagent.Message{Content: "Recovered."}}}}
+		runner, err := goagent.NewRunner(goagent.Agent{Model: model, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "try"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if result.StopReason != goagent.StopComplete || model.calls != 2 {
+			t.Fatalf("result=%+v model calls=%d", result, model.calls)
+		}
+		assertRetryEvents(t, result.Events, []retryEventSpec{
+			{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 1, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed},
+			{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeConsidered},
+			{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeAttempted},
+			{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeSucceeded},
+		})
+	})
+
+	t.Run("runtime retry exhaustion stops explicitly", func(t *testing.T) {
+		storeErr := errors.New("store unavailable")
+		store := &flakySessionStore{loadErrs: []error{storeErr, storeErr}}
+		model := &flakyModel{turns: []goagent.TurnResult{{Message: goagent.Message{Content: "unreached"}}}}
+		runner, err := goagent.NewRunner(goagent.Agent{Model: model, SessionStore: store, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := runner.Run(context.Background(), goagent.RunRequest{SessionID: "session-1", Input: "load"})
+		if !errors.Is(err, storeErr) {
+			t.Fatalf("Run error = %v, want %v", err, storeErr)
+		}
+		if result.StopReason != goagent.StopRetryExhausted || model.calls != 0 {
+			t.Fatalf("result=%+v model calls=%d", result, model.calls)
+		}
+		assertRetryEvents(t, result.Events, []retryEventSpec{
+			{target: goagent.RetryTargetRuntime, reason: goagent.RetryReasonRuntimeError, attempt: 1, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed},
+			{target: goagent.RetryTargetRuntime, reason: goagent.RetryReasonRuntimeError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeConsidered},
+			{target: goagent.RetryTargetRuntime, reason: goagent.RetryReasonRuntimeError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeAttempted},
+			{target: goagent.RetryTargetRuntime, reason: goagent.RetryReasonRuntimeError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed},
+			{target: goagent.RetryTargetRuntime, reason: goagent.RetryReasonRuntimeError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeExhausted, stop: goagent.StopRetryExhausted},
+		})
+	})
+
+	t.Run("tool retry carries call path", func(t *testing.T) {
+		toolErr := errors.New("tool unavailable")
+		model := &flakyModel{turns: []goagent.TurnResult{
+			{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+			{Message: goagent.Message{Content: "Recovered."}, StopReason: goagent.StopComplete},
+		}}
+		var calls int
+		tool := safeFailingOnceTool(t, &calls, toolErr)
+		runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.StopReason != goagent.StopComplete || calls != 2 {
+			t.Fatalf("result=%+v calls=%d", result, calls)
+		}
+		assertRetryEvents(t, result.Events, []retryEventSpec{
+			{target: goagent.RetryTargetTool, reason: goagent.RetryReasonToolError, attempt: 1, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed, toolCallID: "call-1", toolName: "weather"},
+			{target: goagent.RetryTargetTool, reason: goagent.RetryReasonToolError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeConsidered, toolCallID: "call-1", toolName: "weather"},
+			{target: goagent.RetryTargetTool, reason: goagent.RetryReasonToolError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeAttempted, toolCallID: "call-1", toolName: "weather"},
+			{target: goagent.RetryTargetTool, reason: goagent.RetryReasonToolError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeSucceeded, toolCallID: "call-1", toolName: "weather"},
+		})
+	})
+}
+
+func TestRetryCancellationDuringDelayIsReconstructable(t *testing.T) {
+	modelErr := errors.New("model unavailable")
+	model := &flakyModel{errors: []error{modelErr}, turns: []goagent.TurnResult{{Message: goagent.Message{Content: "unreached"}}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	const retryDelay = time.Hour
+	policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionRetry {
+			cancel()
+			return goagent.PolicyDecision{Allowed: true, Retry: goagent.RetryPolicy{Delay: retryDelay}}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Policy: policy, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(ctx, goagent.RunRequest{Input: "try"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.StopReason != goagent.StopCanceled || model.calls != 1 {
+		t.Fatalf("result=%+v model calls=%d", result, model.calls)
+	}
+	assertRetryEvents(t, result.Events, []retryEventSpec{
+		{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 1, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed},
+		{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeConsidered},
+		{target: goagent.RetryTargetModel, reason: goagent.RetryReasonModelError, attempt: 2, maxAttempts: 2, outcome: goagent.RetryOutcomeCanceled, delay: retryDelay, stop: goagent.StopCanceled},
+	})
+}
+
+func TestRetryEnabledDoesNotRetryEventSinkFailure(t *testing.T) {
+	sink := goagent.EventSinkFunc(func(context.Context, goagent.Event) {
+		panic("sink failed")
+	})
+	model := &flakyModel{turns: []goagent.TurnResult{{Message: goagent.Message{Content: "Done."}, StopReason: goagent.StopComplete}}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, EventSinks: []goagent.EventSink{sink}, Retry: goagent.RetryPolicy{MaxAttempts: 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopComplete || model.calls != 1 {
+		t.Fatalf("result=%+v model calls=%d", result, model.calls)
+	}
+	if got := countRetryEvents(result.Events); got != 0 {
+		t.Fatalf("retry events = %d, want 0: %+v", got, result.Events)
 	}
 }
 
@@ -405,6 +629,65 @@ func safeFailingTool(t *testing.T, calls *int, err error) goagent.Tool {
 		t.Fatal(toolErr)
 	}
 	return tool
+}
+
+func safeFailingOnceTool(t *testing.T, calls *int, err error) goagent.Tool {
+	t.Helper()
+	tool, toolErr := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (string, error) {
+			*calls++
+			if *calls == 1 {
+				return "", err
+			}
+			return "clear", nil
+		},
+		Safety: goagent.ToolSafety{ReadOnly: true, Retryable: true},
+	})
+	if toolErr != nil {
+		t.Fatal(toolErr)
+	}
+	return tool
+}
+
+type retryEventSpec struct {
+	target      goagent.RetryTargetKind
+	reason      goagent.RetryReason
+	attempt     int
+	maxAttempts int
+	outcome     goagent.RetryOutcome
+	delay       time.Duration
+	stop        goagent.StopReason
+	toolCallID  string
+	toolName    string
+}
+
+func assertRetryEvents(t *testing.T, events []goagent.Event, want []retryEventSpec) {
+	t.Helper()
+
+	var got []goagent.Event
+	for _, event := range events {
+		if event.Kind == goagent.EventRetry {
+			got = append(got, event)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("retry event count = %d, want %d: %+v", len(got), len(want), got)
+	}
+	for i, event := range got {
+		spec := want[i]
+		if event.Retry.Target.Kind != spec.target || event.Retry.Reason != spec.reason || event.Retry.Attempt != spec.attempt || event.Retry.MaxAttempts != spec.maxAttempts || event.Retry.Outcome != spec.outcome || event.Retry.Delay != spec.delay || event.Retry.StopReason != spec.stop {
+			t.Fatalf("retry event %d = %+v, want %+v", i, event, spec)
+		}
+		if spec.toolCallID != "" && (event.ToolCallID != spec.toolCallID || event.Retry.Target.ToolCallID != spec.toolCallID) {
+			t.Fatalf("retry event %d tool call path = %+v, want call %q", i, event, spec.toolCallID)
+		}
+		if spec.toolName != "" && (event.Tool.Name != spec.toolName || event.Retry.Target.ToolName != spec.toolName) {
+			t.Fatalf("retry event %d tool path = %+v, want tool %q", i, event, spec.toolName)
+		}
+	}
 }
 
 func retryEventWithOutcome(events []goagent.Event, outcome goagent.RetryOutcome) goagent.Event {

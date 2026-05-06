@@ -2,7 +2,6 @@ package goagent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -58,57 +57,26 @@ func newTool(name, description string, explicitSchema ToolSchema, safety ToolSaf
 		}
 	}
 
-	return functionTool{name: name, description: description, fn: toolFn.fn, inputType: toolFn.inputType, schema: cloneToolSchema(schema), safety: safety, constraints: constraints}, nil
+	spec := ToolSpec{Name: name, Description: description, Schema: cloneToolSchema(schema), Safety: safety, Constraints: constraints}
+	return functionTool{spec: spec, fn: toolFn.fn, inputType: toolFn.inputType}, nil
 }
 
 type functionTool struct {
-	name        string
-	description string
-	fn          reflect.Value
-	inputType   reflect.Type
-	schema      ToolSchema
-	safety      ToolSafety
-	constraints ToolConstraints
+	spec      ToolSpec
+	fn        reflect.Value
+	inputType reflect.Type
 }
 
-func (t functionTool) Name() string { return t.name }
+func (t functionTool) Name() string { return t.spec.Name }
 
-func (t functionTool) Description() string { return t.description }
+func (t functionTool) Description() string { return t.spec.Description }
 
 func (t functionTool) Schema() ToolSchema {
-	return cloneToolSchema(t.schema)
+	return cloneToolSchema(t.spec.Schema)
 }
 
 func (t functionTool) Metadata() ToolMetadata {
-	return ToolMetadata{Safety: t.safety, Constraints: t.constraints}
-}
-
-func (t functionTool) Call(ctx context.Context, call ToolCall) (ToolResult, error) {
-	if call.Name != t.name {
-		return ToolResult{}, fmt.Errorf("goagent: tool %q cannot execute call for %q", t.name, call.Name)
-	}
-	if t.constraints.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, t.constraints.Timeout)
-		defer cancel()
-	}
-
-	input, err := decodeToolInput(t.name, t.inputType, call.Input)
-	if err != nil {
-		return ToolResult{}, err
-	}
-
-	outputs := t.fn.Call([]reflect.Value{reflect.ValueOf(ctx), input})
-	if errValue := outputs[1]; !errValue.IsNil() {
-		err := errValue.Interface().(error)
-		return ToolResult{}, fmt.Errorf("goagent: tool %q failed: %w", t.name, err)
-	}
-	content := outputs[0].String()
-	if t.constraints.MaxOutputBytes > 0 && len(content) > t.constraints.MaxOutputBytes {
-		return ToolResult{}, fmt.Errorf("goagent: tool %q output exceeds max output bytes %d", t.name, t.constraints.MaxOutputBytes)
-	}
-
-	return ToolResult{CallID: call.ID, Name: call.Name, Content: content}, nil
+	return ToolMetadata{Safety: t.spec.Safety, Constraints: t.spec.Constraints}
 }
 
 type toolMetadataProvider interface {
@@ -176,42 +144,6 @@ func validateToolName(name string) error {
 		return fmt.Errorf("goagent: tool name %q contains invalid character %q", name, r)
 	}
 	return nil
-}
-
-func decodeSingleStringInput(toolName string, raw json.RawMessage) (string, error) {
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &object); err != nil {
-		return "", fmt.Errorf("goagent: tool %q input must be a JSON object with one string field: %w", toolName, err)
-	}
-	if len(object) != 1 {
-		return "", fmt.Errorf("goagent: tool %q input must contain exactly one string field", toolName)
-	}
-
-	for _, valueRaw := range object {
-		var value string
-		if err := json.Unmarshal(valueRaw, &value); err != nil {
-			return "", fmt.Errorf("goagent: tool %q input value must be a string: %w", toolName, err)
-		}
-		return value, nil
-	}
-
-	panic("unreachable: map length checked above")
-}
-
-func decodeToolInput(toolName string, inputType reflect.Type, raw json.RawMessage) (reflect.Value, error) {
-	if inputType == stringType {
-		input, err := decodeSingleStringInput(toolName, raw)
-		if err != nil {
-			return reflect.Value{}, err
-		}
-		return reflect.ValueOf(input), nil
-	}
-
-	input := reflect.New(inputType)
-	if err := json.Unmarshal(raw, input.Interface()); err != nil {
-		return reflect.Value{}, fmt.Errorf("goagent: tool %q input must match %s: %w", toolName, inputType.Name(), err)
-	}
-	return input.Elem(), nil
 }
 
 func schemaForInputType(toolName string, inputType reflect.Type) (ToolSchema, error) {
@@ -326,9 +258,35 @@ func schemaForField(toolName string, typ reflect.Type) (map[string]any, error) {
 }
 
 func cloneToolSchema(schema ToolSchema) ToolSchema {
+	if schema == nil {
+		return nil
+	}
 	clone := make(ToolSchema, len(schema))
 	for key, value := range schema {
-		clone[key] = value
+		clone[key] = cloneToolSchemaValue(value)
 	}
 	return clone
+}
+
+func cloneToolSchemaValue(value any) any {
+	switch typed := value.(type) {
+	case ToolSchema:
+		return cloneToolSchema(typed)
+	case map[string]any:
+		clone := make(map[string]any, len(typed))
+		for key, value := range typed {
+			clone[key] = cloneToolSchemaValue(value)
+		}
+		return clone
+	case []any:
+		clone := make([]any, len(typed))
+		for i, value := range typed {
+			clone[i] = cloneToolSchemaValue(value)
+		}
+		return clone
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
 }

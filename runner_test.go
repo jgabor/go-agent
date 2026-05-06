@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -152,6 +153,123 @@ func TestRunnerExposesAdvancedToolDefinitionMetadata(t *testing.T) {
 	}
 	if !sawToolCallEvent || !sawToolResultEvent || !sawPolicyEvent {
 		t.Fatalf("events missing advanced tool metadata: %+v", result.Events)
+	}
+}
+
+func TestRunnerUsesRegisteredToolMetadataWithoutRediscovery(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool := &metadataCountingTool{
+		name: "weather",
+		metadata: goagent.ToolMetadata{
+			Safety:      goagent.ToolSafety{ReadOnly: true, Retryable: true},
+			Constraints: goagent.ToolConstraints{Timeout: time.Second, MaxOutputBytes: 64},
+		},
+	}
+	var decisions []goagent.Decision
+	policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		decisions = append(decisions, decision)
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy, Retry: goagent.RetryPolicy{MaxAttempts: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.metadataCalls != 1 {
+		t.Fatalf("Metadata calls after NewRunner = %d, want 1", tool.metadataCalls)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.metadataCalls != 1 {
+		t.Fatalf("Metadata calls after Run = %d, want cached construction metadata", tool.metadataCalls)
+	}
+	assertAdvancedToolSpec(t, model.requests[0].Tools[0])
+
+	var sawPolicyToolCall, sawToolCallEvent, sawToolResultEvent bool
+	for _, decision := range decisions {
+		if decision.Kind == goagent.DecisionToolCall {
+			sawPolicyToolCall = true
+			assertAdvancedToolSpec(t, decision.Tool)
+		}
+	}
+	for _, event := range result.Events {
+		switch event.Kind {
+		case goagent.EventToolCall:
+			sawToolCallEvent = true
+			assertAdvancedToolSpec(t, event.Tool)
+		case goagent.EventToolResult:
+			sawToolResultEvent = true
+			assertAdvancedToolSpec(t, event.Tool)
+		}
+	}
+	if !sawPolicyToolCall || !sawToolCallEvent || !sawToolResultEvent {
+		t.Fatalf("missing cached metadata surfaces: decisions=%+v events=%+v", decisions, result.Events)
+	}
+}
+
+func TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns(t *testing.T) {
+	model := &schemaMutatingModel{}
+	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather with nested schema metadata.",
+		Schema: goagent.ToolSchema{
+			"type": "object",
+			"properties": map[string]any{
+				"city": map[string]any{"type": "string"},
+			},
+			"required": []string{"city"},
+		},
+		Function: func(context.Context, string) (string, error) {
+			return "clear", nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policyTools []goagent.ToolSpec
+	policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionToolCall || decision.Kind == goagent.DecisionToolResult {
+			policyTools = append(policyTools, decision.Tool)
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 2; i++ {
+		result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.StopReason != goagent.StopComplete {
+			t.Fatalf("run %d StopReason = %q, want %q", i+1, result.StopReason, goagent.StopComplete)
+		}
+		for _, event := range result.Events {
+			if event.Kind == goagent.EventToolCall || event.Kind == goagent.EventToolResult {
+				assertUnmutatedWeatherSchema(t, event.Tool.Schema)
+			}
+			if event.Kind == goagent.EventPolicyDecision && (event.Decision.Kind == goagent.DecisionToolCall || event.Decision.Kind == goagent.DecisionToolResult) {
+				assertUnmutatedWeatherSchema(t, event.Tool.Schema)
+				assertUnmutatedWeatherSchema(t, event.Decision.Tool.Schema)
+			}
+		}
+	}
+	if len(policyTools) != 4 {
+		t.Fatalf("policy tool surfaces = %d, want 4", len(policyTools))
+	}
+	for _, spec := range policyTools {
+		assertUnmutatedWeatherSchema(t, spec.Schema)
+	}
+	if model.firstTurns != 2 {
+		t.Fatalf("first turns = %d, want one per run", model.firstTurns)
 	}
 }
 
@@ -419,6 +537,31 @@ func assertAdvancedToolSpec(t *testing.T, spec goagent.ToolSpec) {
 	}
 }
 
+func assertUnmutatedWeatherSchema(t *testing.T, schema goagent.ToolSchema) {
+	t.Helper()
+	if err := unmutatedWeatherSchemaError(schema); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+func unmutatedWeatherSchemaError(schema goagent.ToolSchema) error {
+	if schema["type"] != "object" {
+		return fmt.Errorf("schema type = %v, want object: %+v", schema["type"], schema)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("schema properties = %T, want map[string]any", schema["properties"])
+	}
+	city, ok := properties["city"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("city schema = %T, want map[string]any", properties["city"])
+	}
+	if city["type"] != "string" {
+		return fmt.Errorf("city schema type = %v, want string: %+v", city["type"], schema)
+	}
+	return nil
+}
+
 type recordingModel struct {
 	turns    []goagent.TurnResult
 	err      error
@@ -455,4 +598,47 @@ func (t namedTool) Call(context.Context, goagent.ToolCall) (goagent.ToolResult, 
 		return goagent.ToolResult{}, t.err
 	}
 	return goagent.ToolResult{CallID: "call-1", Name: t.name, Content: "tool result"}, nil
+}
+
+type metadataCountingTool struct {
+	name          string
+	metadata      goagent.ToolMetadata
+	metadataCalls int
+}
+
+func (t *metadataCountingTool) Name() string { return t.name }
+
+func (*metadataCountingTool) Description() string { return "Get weather with cached metadata." }
+
+func (*metadataCountingTool) Schema() goagent.ToolSchema { return goagent.ToolSchema{"type": "object"} }
+
+func (t *metadataCountingTool) Metadata() goagent.ToolMetadata {
+	t.metadataCalls++
+	return t.metadata
+}
+
+func (t *metadataCountingTool) Call(context.Context, goagent.ToolCall) (goagent.ToolResult, error) {
+	return goagent.ToolResult{CallID: "call-1", Name: t.name, Content: "tool result"}, nil
+}
+
+type schemaMutatingModel struct {
+	firstTurns int
+}
+
+func (m *schemaMutatingModel) Turn(_ context.Context, request goagent.TurnRequest) (goagent.TurnResult, error) {
+	if len(request.Messages) > 0 && request.Messages[len(request.Messages)-1].Role == goagent.RoleTool {
+		return goagent.TurnResult{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete}, nil
+	}
+	if len(request.Tools) != 1 {
+		return goagent.TurnResult{}, fmt.Errorf("tools = %d, want 1", len(request.Tools))
+	}
+	if err := unmutatedWeatherSchemaError(request.Tools[0].Schema); err != nil {
+		return goagent.TurnResult{}, err
+	}
+	m.firstTurns++
+	request.Tools[0].Schema["type"] = "mutated"
+	properties := request.Tools[0].Schema["properties"].(map[string]any)
+	city := properties["city"].(map[string]any)
+	city["type"] = "number"
+	return goagent.TurnResult{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}}, nil
 }

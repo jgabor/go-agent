@@ -1,4 +1,18 @@
 cycles:
+  - number: 6
+    timestamp: "2026-05-06 11:12"
+    type: feat
+    phase: build
+    what: Expanded tool schema support with struct input reflection and explicit schema metadata.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog asked for reflection where enough and explicit definitions when not enough.
+    discovered: `NewTool` can remain the ordinary entry point while `NewToolWithSchema` covers host-owned schema metadata without adding a DSL.
+    verified: mage check
+    next: Add pluggable session storage.
+    context:
+      intent: Make tool schemas useful beyond the single-string quick-start shape.
+      constraints: Keep schema metadata ordinary Go, avoid workflow DSLs, and do not add provider/runtime-constructor scope.
+      scope: Struct input decoding, JSON-tag schema generation, explicit schema API, tests, README roadmap, TODO, changelog, and progress log.
   - number: 5
     timestamp: "2026-05-06 10:31"
     type: test

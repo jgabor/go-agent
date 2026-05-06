@@ -47,6 +47,97 @@ func TestNewToolAdaptsContextStringFunction(t *testing.T) {
 	}
 }
 
+func TestNewToolAdaptsStructInputFunctionAndGeneratesSchema(t *testing.T) {
+	type weatherInput struct {
+		City string `json:"city" description:"City name."`
+		Days int    `json:"days"`
+		Unit string `json:"unit,omitempty"`
+		Skip string `json:"-"`
+	}
+
+	tool, err := goagent.NewTool("weather", "Get the weather for a city.", func(ctx context.Context, input weatherInput) (string, error) {
+		if input.City != "Austin" || input.Days != 2 || input.Unit != "F" {
+			t.Fatalf("input = %+v", input)
+		}
+		return input.City + " forecast", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schema := tool.Schema()
+	if schema["type"] != "object" || schema["additionalProperties"] != false {
+		t.Fatalf("Schema = %+v", schema)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("properties = %T, want map[string]any", schema["properties"])
+	}
+	if _, ok := properties["Skip"]; ok {
+		t.Fatalf("ignored field included in schema: %+v", properties)
+	}
+	city := properties["city"].(map[string]any)
+	if city["type"] != "string" || city["description"] != "City name." {
+		t.Fatalf("city schema = %+v", city)
+	}
+	days := properties["days"].(map[string]any)
+	if days["type"] != "integer" {
+		t.Fatalf("days schema = %+v", days)
+	}
+	unit := properties["unit"].(map[string]any)
+	if unit["type"] != "string" {
+		t.Fatalf("unit schema = %+v", unit)
+	}
+	required := schema["required"].([]string)
+	if len(required) != 2 || required[0] != "city" || required[1] != "days" {
+		t.Fatalf("required = %+v", required)
+	}
+
+	result, err := tool.Call(context.Background(), goagent.ToolCall{
+		ID:    "call-1",
+		Name:  "weather",
+		Input: json.RawMessage(`{"city":"Austin","days":2,"unit":"F"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "Austin forecast" {
+		t.Fatalf("Content = %q", result.Content)
+	}
+}
+
+func TestNewToolWithSchemaUsesExplicitSchema(t *testing.T) {
+	explicit := goagent.ToolSchema{
+		"type": "object",
+		"properties": map[string]any{
+			"city": map[string]any{"type": "string", "enum": []string{"Austin"}},
+		},
+	}
+	tool, err := goagent.NewToolWithSchema("weather", "Get weather.", explicit, func(context.Context, string) (string, error) {
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schema := tool.Schema()
+	properties := schema["properties"].(map[string]any)
+	city := properties["city"].(map[string]any)
+	if city["enum"] == nil {
+		t.Fatalf("explicit schema not preserved: %+v", schema)
+	}
+	schema["type"] = "changed"
+	if tool.Schema()["type"] != "object" {
+		t.Fatal("Schema did not return a top-level copy")
+	}
+
+	if _, err := goagent.NewToolWithSchema("weather", "Get weather.", nil, func(context.Context, string) (string, error) {
+		return "ok", nil
+	}); err == nil {
+		t.Fatal("NewToolWithSchema succeeded with nil schema")
+	}
+}
+
 func TestNewToolRejectsUnsupportedFunctionShapes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -65,7 +156,7 @@ func TestNewToolRejectsUnsupportedFunctionShapes(t *testing.T) {
 			if err == nil {
 				t.Fatal("NewTool succeeded for unsupported function shape")
 			}
-			if !strings.Contains(err.Error(), "func(context.Context, string) (string, error)") {
+			if !strings.Contains(err.Error(), "func(context.Context, string|struct) (string, error)") {
 				t.Fatalf("error = %q, want supported signature", err)
 			}
 		})

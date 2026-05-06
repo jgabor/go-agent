@@ -16,15 +16,11 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Implement the core agent loop.
 - [x] Implement minimal policy hooks in the core loop.
 - [x] Implement structured streaming events.
+- [x] Expand tool schema support.
 
 ## Now
 
 ## Next
-
-- [ ] Expand tool schema support.
-  - Acceptance: struct inputs can produce JSON-schema-like metadata from tags where reflection is enough.
-  - Acceptance: explicit tool definitions are available when reflection is not enough.
-  - Acceptance: schema metadata remains ordinary Go code and does not introduce a workflow DSL.
 
 - [ ] Add pluggable session storage.
   - Acceptance: runtime depends on a session store interface, not a concrete database.

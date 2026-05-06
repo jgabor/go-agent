@@ -1,0 +1,149 @@
+header:
+  level: full
+  created: 2026-05-06
+  status: completed
+  reviewed: 2026-05-06
+  critic_issues: "7 found, 7 addressed, 0 dismissed"
+  revised: >-
+    Removed Node/Bun markdown and JSON formatting from the first DX pass, added
+    empty-module gate behavior, added tool version policy, made hooks check-first,
+    and added module path/default branch confirmation before setup.
+  title: "Plan: Go DX Baseline"
+
+what: >-
+  Establish the first concrete development experience baseline for go-agent:
+  confirm repository identity, initialize the Go module, add shared formatting and
+  lint configuration, define canonical verification commands, wire local Go-only
+  hooks, add CI parity, and update documentation/status so future runtime work has
+  one consistent verification path.
+
+why: >-
+  go-agent is about to move from vision and README into implementation. A
+  production-minded Go runtime needs formatter-backed style, repeatable checks,
+  vulnerability scanning, and local/CI parity before API work accumulates. The
+  setup should adopt proven conventions from lira and spela without importing
+  their GUI, frontend, packaging, release, or generated-schema machinery.
+
+constraints: >-
+  Keep the work library-first. Do not add agent runtime APIs, provider adapters,
+  examples, CLI product behavior, frontend tooling, release automation, Wails,
+  Bun, Playwright, AUR publishing, git-cliff automation, or generated-schema hooks.
+  Do not add placeholder production code just to satisfy tools. Prefer standard Go
+  commands and small repository-owned configuration over broad dependencies.
+
+scope:
+  included:
+    - Confirmed module path and default branch assumptions for initial setup.
+    - Minimal go.mod for the importable Go module.
+    - .editorconfig matching the shared Go/text formatting convention.
+    - .golangci.yml using the shared v2 lint and formatter baseline.
+    - Mage command surface for tidy, test, vet, lint, vulnerability, and aggregate checks.
+    - Lefthook configuration for Go-only local gates.
+    - GitHub Actions CI for the same baseline gates.
+    - README status and command documentation aligned with the new files.
+  excluded:
+    - Public agent runtime API implementation.
+    - Provider, model, tool, session, observability, or policy implementation.
+    - Example applications or CLI product surface.
+    - Frontend, GUI, Playwright, Wails, AUR, or release workflow setup.
+    - Generated schema checks or schema freshness gates.
+  deferred:
+    - git-cliff and changelog release automation.
+    - Repository-wide action SHA pinning policy.
+    - Generated schema freshness checks if schemas become a public contract.
+    - Optional CLI build target after a CLI exists.
+
+design: >-
+  Layer verification from identity outward: establish the module and formatting
+  contract first, make Mage the canonical local command surface, have Lefthook call
+  those checks for fast developer feedback, and make CI run equivalent gates for
+  remote parity. Empty-module behavior is explicit: checks may report a clear skip
+  where no packages exist, but they must not force fake runtime code into the
+  repository.
+
+tasks:
+  - number: 1
+    name: Confirm repository identity
+    depends_on: []
+    status: complete
+    acceptance:
+      - GIVEN the setup starts WHEN repository metadata is inspected THEN the intended module path is known before go.mod is written.
+      - GIVEN CI setup is in scope WHEN the default branch is checked THEN the workflow trigger targets the repository's actual default branch.
+      - GIVEN identity cannot be determined confidently WHEN execution reaches this task THEN implementation stops for human input instead of guessing.
+
+  - number: 2
+    name: Initialize Go module foundation
+    depends_on:
+      - "1"
+    status: complete
+    acceptance:
+      - GIVEN a fresh clone WHEN a developer runs go env GOMOD from the repository THEN it resolves to this repository's go.mod.
+      - GIVEN the repository has no runtime implementation yet WHEN module setup is complete THEN no public agent API or placeholder production code has been introduced.
+      - GIVEN module setup is complete WHEN go mod tidy is run THEN it finishes without creating unrelated dependencies.
+
+  - number: 3
+    name: Add formatting and lint configuration
+    depends_on:
+      - "2"
+    status: complete
+    acceptance:
+      - GIVEN repository files are edited in an EditorConfig-aware editor WHEN files are saved THEN Go uses tabs and text/config files use two-space indentation, LF endings, final newlines, and trimmed trailing whitespace.
+      - GIVEN Go files exist WHEN lint runs THEN the repository uses the shared golangci-lint v2 baseline for goimports, gofumpt, errcheck, govet, ineffassign, staticcheck, and unused.
+      - GIVEN no Go packages exist yet WHEN lint configuration is present THEN the repo does not require fake packages solely to satisfy the linter.
+
+  - number: 4
+    name: Add canonical Mage verification commands
+    depends_on:
+      - "2"
+      - "3"
+    status: complete
+    acceptance:
+      - GIVEN a developer has Mage installed WHEN they run mage -l THEN tidy, test, vet, lint, vuln, and check targets are discoverable.
+      - GIVEN no Go packages exist WHEN test, vet, lint, or vuln targets run THEN they skip or explain the empty-module condition clearly without adding placeholder code.
+      - GIVEN a required external verification tool is missing WHEN its target runs THEN the failure names the missing tool and how to install the expected version.
+      - GIVEN the repo is healthy WHEN mage check runs THEN it executes every applicable canonical gate in a predictable order.
+
+  - number: 5
+    name: Wire Go-only Lefthook gates
+    depends_on:
+      - "4"
+    status: complete
+    acceptance:
+      - GIVEN Lefthook is installed WHEN Go module or Go source files are staged THEN local hooks run the relevant canonical Go gates before allowing the commit.
+      - GIVEN hooks detect go.mod or go.sum drift WHEN pre-commit runs THEN the hook fails with a clear message rather than silently committing unstaged mutations.
+      - GIVEN no matching files are staged WHEN hooks run THEN irrelevant gates are skipped instead of failing due to empty input.
+      - GIVEN Markdown or JSON files are staged WHEN this first DX plan runs THEN no Node, Bun, markdownlint, or Prettier dependency is required by the hooks.
+
+  - number: 6
+    name: Add CI parity for baseline gates
+    depends_on:
+      - "4"
+      - "5"
+    status: complete
+    acceptance:
+      - GIVEN a push or pull request targets the configured default branch WHEN GitHub Actions runs THEN CI sets up Go from go.mod and runs the same canonical gates expected locally.
+      - GIVEN CI installs verification tooling WHEN a failure occurs THEN tool versions are explicit enough to reproduce the failure locally.
+      - GIVEN this repository is a library-first module WHEN CI is added THEN no GUI, frontend, package distribution, release, or schema-generation job is included.
+
+  - number: 7
+    name: Plan-level freshness checkpoint
+    depends_on:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+    status: complete
+    acceptance:
+      - GIVEN all setup tasks are complete WHEN README status is reviewed THEN roadmap evidence matches the actual files and commands present.
+      - GIVEN all setup tasks are complete WHEN repository status and verification outputs are inspected THEN only intentional DX files remain changed and every documented gate has run or been explicitly reported as unavailable.
+      - GIVEN execution reveals a tooling mismatch or premature assumption WHEN the plan is updated THEN the surprise is recorded instead of silently widening scope.
+
+overall_acceptance:
+  - GIVEN a developer opens the repository after this plan is complete WHEN they inspect README and mage targets THEN they can identify the canonical local verification path without reading CI internals.
+  - GIVEN future runtime implementation begins WHEN code is added THEN formatting, linting, testing, vulnerability checks, hooks, and CI already have a consistent baseline.
+  - GIVEN the project remains library-first WHEN the DX setup is complete THEN no unrelated GUI, frontend, release, schema-generation, or agent runtime implementation has been introduced.
+
+surprises:
+  - No remote is configured yet; execution used the README import path github.com/jgabor/go-agent and the local main branch for initial module and CI identity.

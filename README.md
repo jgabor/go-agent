@@ -26,6 +26,7 @@ go-agent ships the primitives. Your application owns the policy.
 - [Observability](#observability)
 - [Policy Hooks](#policy-hooks)
 - [Extensions](#extensions)
+- [Development](#development)
 - [Features & Roadmap](#features--roadmap)
 - [Philosophy](#philosophy)
 - [Contributing](#contributing)
@@ -289,6 +290,54 @@ Examples of extension patterns:
 If a feature can be expressed as a normal Go package, it does not belong in the
 core runtime by default.
 
+## Development
+
+The repository uses a small Go-first DX baseline:
+
+- Go module: `github.com/jgabor/go-agent`
+- Go version: `1.26.0` from `go.mod`
+- Build automation: `mage`
+- Linting: `golangci-lint` v2 with `goimports`, `gofumpt`, `errcheck`, `govet`, `ineffassign`, `staticcheck`, and `unused`
+- Vulnerability scanning: `govulncheck`
+- Local hooks: `lefthook`
+
+Install the verification tools:
+
+```bash
+go install github.com/magefile/mage@v1.17.2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.1
+go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+```
+
+Run the canonical gates:
+
+```bash
+mage -l
+mage check
+```
+
+Individual gates are also available:
+
+```bash
+mage tidy
+mage tidyCheck
+mage test
+mage vet
+mage lint
+mage vuln
+```
+
+Until Go packages exist, package-dependent gates skip with a clear message
+instead of forcing placeholder runtime code into the repository.
+
+Optional local hooks:
+
+```bash
+lefthook install
+```
+
+CI runs `mage check` on pushes and pull requests targeting `main`.
+
 ## Features & Roadmap
 
 This table reflects the repository today.
@@ -296,7 +345,9 @@ This table reflects the repository today.
 | Area | Intended capability | Current status | Evidence |
 |------|---------------------|----------------|----------|
 | README | Product-facing documentation and roadmap | Done | `README.md` |
-| Go module | `go.mod` and importable package | Not started | No `go.mod` exists |
+| Go module | `go.mod` and importable package | Done | `go.mod` declares `github.com/jgabor/go-agent` |
+| DX baseline | Formatting, linting, local hooks, and canonical gates | Done | `.editorconfig`, `.golangci.yml`, `.lefthook.yml`, `magefile.go` |
+| CI | Remote verification for the DX baseline | Done | `.github/workflows/ci.yml` runs `mage check` |
 | Public API | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Not started | No Go source exists |
 | Agent loop | Model turn loop with tool dispatch and stop reasons | Not started | No runtime code exists |
 | Tool schemas | Go function and struct schema support | Not started | No runtime code exists |
@@ -305,7 +356,7 @@ This table reflects the repository today.
 | Providers | OpenAI-compatible provider adapter | Not started | No provider package exists |
 | Observability | Event sink and OpenTelemetry integration | Not started | No runtime code exists |
 | Policy hooks | Approval, limits, validation, and authorization hooks | Not started | No runtime code exists |
-| Tests | Unit and integration coverage for runtime behavior | Not started | No test files exist |
+| Tests | Unit and integration coverage for runtime behavior | Not started | No runtime test files exist |
 | Examples | Minimal app, service, worker, and CLI examples | Not started | No examples directory exists |
 | CLI | Optional developer CLI around the library | Deferred | Library-first direction |
 | MCP adapter | Optional adapter package outside the core | Deferred | Deliberate non-goal for core |
@@ -343,7 +394,8 @@ outputs, and errors.
 The project is pre-implementation. The first useful contributions are design and
 runtime foundations:
 
-- Turn the roadmap into an executable plan.
+- Keep roadmap status aligned with repository reality.
+- Run `mage check` before proposing changes.
 - Define the smallest public API that satisfies the quick start.
 - Build tests before broadening features.
 - Keep examples honest and runnable.

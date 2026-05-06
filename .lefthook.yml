@@ -1,0 +1,33 @@
+output: [
+    # "meta",
+    "summary",
+    # "success",
+    "failure",
+    # "execution",
+    # "execution_out",
+    # "execution_info",
+    # "skips",
+  ]
+
+post-checkout:
+  commands:
+    tidy:
+      run: mage tidyCheck
+
+pre-commit:
+  commands:
+    tidy:
+      run: mage tidyCheck
+      glob: "*.{go,mod,sum}"
+    lint:
+      run: mage lint
+      glob: "*.go"
+    vet:
+      run: mage vet
+      glob: "*.go"
+
+pre-push:
+  commands:
+    check:
+      run: mage check
+      glob: "*.{go,mod,sum}"

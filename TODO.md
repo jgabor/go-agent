@@ -19,16 +19,11 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Expand tool schema support.
 - [x] Add pluggable session storage.
 - [x] Expand policy hooks.
+- [x] Add an OpenAI-compatible provider adapter.
 
 ## Now
 
 ## Next
-
-- [ ] Add an OpenAI-compatible provider adapter.
-  - Acceptance: adapter packaging matches the API decision from the first slice.
-  - Acceptance: API keys and model names are supplied by the host application.
-  - Acceptance: tests avoid live network calls unless explicitly marked integration-only.
-  - Acceptance: runtime core still depends on the model interface, not provider packages.
 
 - [ ] Add observability integration points.
   - Acceptance: applications can attach event sinks without changing run behavior.

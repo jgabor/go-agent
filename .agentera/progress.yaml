@@ -1,4 +1,18 @@
 cycles:
+  - number: 9
+    timestamp: "2026-05-06 12:52"
+    type: feat
+    phase: build
+    what: Added an OpenAI-compatible provider adapter package.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required provider packaging aligned with the root Model contract and tests without live network calls.
+    discovered: A separate `providers/openai` package keeps the runtime core dependent only on the Model interface.
+    verified: mage check
+    next: Add observability integration points.
+    context:
+      intent: Provide a concrete OpenAI-compatible model adapter without moving provider details into the core runtime.
+      constraints: Host supplies API key/model/base URL/client; tests use httptest only; README remains aspirational outside the roadmap.
+      scope: ChatModel, chat completions request/response mapping, tool call parsing, provider error handling, tests, README roadmap, TODO, changelog, and progress log.
   - number: 8
     timestamp: "2026-05-06 11:28"
     type: feat

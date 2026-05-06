@@ -126,10 +126,13 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			return r.saveResult(ctx, state.fail(StopModelError, Event{TurnID: turnID, Err: err}))
 		}
 
-		if turn.Message.Content != "" || turn.Message.Role != "" {
+		if turn.Message.Content != "" || turn.Message.Role != "" || len(turn.ToolCalls) > 0 {
 			message := turn.Message
 			if message.Role == "" {
 				message.Role = RoleAssistant
+			}
+			if len(message.ToolCalls) == 0 {
+				message.ToolCalls = append([]ToolCall(nil), turn.ToolCalls...)
 			}
 			state.session.Messages = append(state.session.Messages, message)
 			if message.Content != "" {

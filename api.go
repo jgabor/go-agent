@@ -64,6 +64,7 @@ type Message struct {
 	Content    string
 	Name       string
 	ToolCallID string
+	ToolCalls  []ToolCall
 }
 
 // Role identifies the source of a transcript message.

@@ -315,7 +315,7 @@ This table reflects the repository today.
 | Tool schemas            | Go function and struct schema support                   | Started        | Struct inputs and explicit schemas exist   |
 | Streaming               | Structured event stream for runs                        | Started        | Runner Stream with event correlation tests |
 | Sessions                | Pluggable session storage                               | Started        | SessionStore and memory store exist        |
-| Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists                 |
+| Providers               | OpenAI-compatible provider adapter                      | Started        | `providers/openai` chat adapter exists     |
 | Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists                     |
 | Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Run/tool/result decisions in events        |
 | Tests                   | Unit and integration coverage for runtime behavior      | Started        | API and behavior contract tests exist      |

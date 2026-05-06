@@ -41,6 +41,12 @@ direction: >-
   deployment model. Over time, go-agent should become the small trusted core
   beneath domain agents: the thing teams embed when they want autonomy inside
   their systems, not another system to operate.
+direction_addendum: >-
+  go-agent should make production-ready agent runtime behavior easy to start and
+  hard to misread. Turnkey means safe runtime defaults, typed policy decisions,
+  inspectable retry and stop behavior, and excellent tool-calling support. It
+  does not mean owning auth, settings, prompts, resource loading, UI, or product
+  lifecycle in the root package.
 deliberate_non_goals:
   - No hosted control plane as the default product.
   - No built-in MCP requirement; adapters can live outside the core.

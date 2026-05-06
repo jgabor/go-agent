@@ -1,0 +1,57 @@
+decisions:
+  - number: 1
+    date: 2026-05-06
+    question: How should go-agent adapt Pi coding-agent patterns without becoming a product shell?
+    context: >-
+      Pi's coding-agent package demonstrated a factory-first SDK, broad runtime
+      lifecycle hooks, rich tool definitions, and product-level assembly for
+      auth, settings, skills, prompts, resources, sessions, extensions, and UI.
+      go-agent's vision remains library-first: a compact Go runtime that accepts
+      resolved host dependencies and avoids hosted platforms, workflow DSLs,
+      permission theater, mandatory CLIs, and product-owned resource lifecycle.
+    alternatives:
+      - name: '[Pi-like product shell]'
+        status: rejected
+        tradeoffs: >-
+          Would provide batteries-included auth, settings, resources, lifecycle
+          hooks, and extension mutation, but would turn the root runtime into a
+          framework/product shell and conflict with host-owned Go integration.
+        win_condition: >-
+          Choose this only if go-agent intentionally pivots from embeddable
+          runtime to full agent application framework.
+      - name: '[go-agent minimal core only]'
+        status: rejected
+        tradeoffs: >-
+          Preserves maximum explicitness through Agent and NewRunner but weakens
+          the one-import turnkey promise as retry, compaction, runtime defaults,
+          and richer tools arrive.
+        win_condition: >-
+          Choose this if keeping every construction choice explicit matters more
+          than quick-start ergonomics and runtime defaults.
+      - name: '[Adapted runtime-first ergonomics]'
+        status: chosen
+        tradeoffs: >-
+          Adapts Pi's factory-first SDK and rich tool authoring while rejecting
+          product assembly. The core supplies runtime defaults and typed control
+          points; the host still owns auth, settings, skills, prompts, resource
+          loading, and product lifecycle.
+        win_condition: >-
+          Users get a turnkey runner through a small facade while advanced users
+          can still inspect and wire Agent, Policy, Tool, SessionStore, EventSink,
+          RuntimeConfig, and ToolDefinition explicitly.
+    choice: >-
+      Use adapted runtime-first ergonomics: add a primary New(options...) facade
+      over explicit Agent/NewRunner construction; keep product assembly
+      host-owned; avoid a mutable Pi-like lifecycle bus in core; route retry
+      through typed Policy decisions; and make a rich ToolDefinition the
+      canonical advanced tool authoring path while keeping simple function tools
+      easy.
+    reasoning: >-
+      The deciding variable was what "turnkey" means. For go-agent, turnkey
+      should mean safe runtime defaults and strong tool/runtime ergonomics, not
+      ownership of auth, settings, skills, prompts, registries, or UI. Pi is a
+      useful model for one shared SDK path and high-quality tool definitions, but
+      its extension/resource shell belongs outside go-agent's root runtime.
+    confidence: provisional
+    feeds_into: [VISION.md, TODO.md]
+archive: []

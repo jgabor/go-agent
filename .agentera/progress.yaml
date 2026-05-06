@@ -1,4 +1,18 @@
 cycles:
+  - number: 12
+    timestamp: "2026-05-06 16:43"
+    type: docs
+    phase: build
+    what: Added a runnable service example embedding the runtime in HTTP handlers.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required a server-style example that keeps the runtime embedded in a Go application.
+    discovered: The implemented API supports service embedding with sessions, policy, event sinks, and per-request timeouts without extra framework code.
+    verified: mage check
+    next: Add a worker example.
+    context:
+      intent: Show host applications how to use go-agent inside an HTTP service.
+      constraints: Keep the example runnable without network access or API keys, and keep README aspirational outside the roadmap.
+      scope: examples/service main, httptest coverage, example README, roadmap evidence, TODO, changelog, and progress log.
   - number: 11
     timestamp: "2026-05-06 16:28"
     type: docs

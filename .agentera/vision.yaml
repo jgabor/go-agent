@@ -1,0 +1,68 @@
+project_name: go-agent
+north_star: >-
+  go-agent gives Go applications a production agent runtime through one import:
+  a harness that runs inside the app, speaks normal Go, and lets teams ship
+  tool-using agents without adopting a hosted platform or foreign workflow model.
+personas:
+  - name: The Go service owner adding agency to a real system
+    description: >-
+      They own an API, CLI, worker, or internal platform already written in Go.
+      They need agents that can call existing business logic, respect production
+      boundaries, and surface every decision clearly enough to debug at 2 a.m.
+  - name: The platform engineer who distrusts magic runtimes
+    description: >-
+      They want observability, control, and replaceable pieces. They will accept
+      autonomy only when the loop, tools, state, retries, and failure modes are
+      inspectable through code and events.
+  - name: The library author building a domain-specific agent surface
+    description: >-
+      They want to expose a small harness to their users without forcing a new
+      ecosystem. Their extension points should be ordinary Go interfaces, not a
+      marketplace, sidecar, or framework religion.
+principles:
+  - name: One import, real runtime
+    description: The first path should feel instant, but the runtime must survive production pressure.
+  - name: Go owns the shape
+    description: Use Go interfaces, contexts, errors, tests, and modules before inventing abstractions.
+  - name: Primitives over product opinions
+    description: Provide loops, tools, state, streaming, events, and policy hooks. Leave workflows to users.
+  - name: Observable by default
+    description: Every turn, tool call, retry, and stop reason should be reconstructable without guesswork.
+  - name: Extensible without ceremony
+    description: Extensions should be code, config, or files that a Go developer already understands.
+  - name: Refuse theater
+    description: Do not simulate safety, planning, memory, or orchestration when ownership belongs elsewhere.
+direction: >-
+  go-agent should begin as a compact embeddable harness: model calls, tool
+  dispatch, session state, streaming events, durable cancellation, and typed
+  extension points. Its adoption arc is library first, CLI second, platform
+  never by default. It should make a Go binary capable of running agentic work
+  locally, in services, or in workers while preserving the host application's
+  deployment model. Over time, go-agent should become the small trusted core
+  beneath domain agents: the thing teams embed when they want autonomy inside
+  their systems, not another system to operate.
+deliberate_non_goals:
+  - No hosted control plane as the default product.
+  - No built-in MCP requirement; adapters can live outside the core.
+  - No baked-in sub-agent hierarchy; coordination is an extension pattern.
+  - No workflow DSL that competes with Go code.
+  - No model marketplace; providers are replaceable adapters.
+  - No permission-popup theater; policy must match the host environment.
+  - No mandatory TUI, GUI, or chat product.
+  - No background shell abstraction; execution belongs to explicit tools.
+identity:
+  personality: compact · explicit · production-minded
+  voice: >-
+    Direct, technical, and unsentimental. It explains what ran, what failed,
+    what changed, and what the host application still owns.
+  emotional_register: >-
+    Using it should feel like installing a sharp engine into an existing machine:
+    powerful, contained, inspectable, and ready to remove if it misbehaves.
+  naming: >-
+    Public names should be plain Go: Agent, Runner, Tool, Session, Event, Policy.
+    Avoid mascot vocabulary in APIs. Keep the working name go-agent until a
+    stronger identity earns the rename.
+tension: >-
+  The core tension is instant agency versus production ownership. go-agent must
+  feel like one import, but it cannot hide control planes, security decisions,
+  persistence choices, or orchestration policies that belong to the application.

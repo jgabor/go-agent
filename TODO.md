@@ -11,14 +11,9 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Establish DX baseline with formatting, linting, local hooks, and Mage gates.
 - [x] Add CI for the canonical `mage check` gate.
 - [x] Lock the first-slice public API contract.
+- [x] Specify runtime behavior with tests before broad implementation.
 
 ## Now
-
-- [ ] Specify runtime behavior with tests before broad implementation.
-  - Acceptance: tests cover normal completion, tool call dispatch, tool errors, model errors, cancellation, policy denial, step limit, and stop reasons.
-  - Acceptance: tests use fake model and tool implementations rather than network providers.
-  - Acceptance: tests describe event ordering and correlation for each covered run path.
-  - Acceptance: retry behavior is either specified with tests and events or explicitly deferred with matching README wording.
 
 - [ ] Implement minimal function tools for the README quick start.
   - Acceptance: ordinary Go functions can be registered as tools for the quick-start case.

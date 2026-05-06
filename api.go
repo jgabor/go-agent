@@ -23,6 +23,8 @@ type Runner interface {
 type RunRequest struct {
 	Input   string
 	Session Session
+	// MaxSteps limits model turns in one run. Zero means the runtime default applies.
+	MaxSteps int
 }
 
 // RunResult is the final observable outcome of an agent run.
@@ -116,6 +118,8 @@ type Session struct {
 
 // Event is a structured record emitted while a run proceeds.
 type Event struct {
+	// Sequence is a run-local, monotonically increasing event number.
+	Sequence   int64
 	Kind       EventKind
 	RunID      string
 	TurnID     string

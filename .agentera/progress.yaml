@@ -1,4 +1,19 @@
 cycles:
+  - number: 2
+    timestamp: "2026-05-06 08:39"
+    type: test
+    phase: build
+    what: Specified runtime behavior with contract tests before broad implementation.
+    commit: "Pending at log time; commit requested afterward"
+    inspiration: Standard Go table-driven tests and project TODO acceptance criteria.
+    discovered: Runtime implementation should satisfy ordered events with run-local sequence numbers and explicit tool-call correlation.
+    verified: mage check
+    next: Implement minimal function tools for the README quick start.
+    context:
+      intent: Make the next TODO item executable without building the full runner.
+      constraints: Keep README aspirational outside the roadmap, avoid network providers, and avoid placeholder runtime code.
+      unknowns: Exact constructor and function-tool helper names remain deferred to the function-tools slice.
+      scope: Runtime behavior tests, minimal API fields for step limits and event ordering, roadmap retry deferral, TODO, and changelog.
   - number: 1
     timestamp: "2026-05-06 08:13"
     type: feat

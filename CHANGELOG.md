@@ -4,8 +4,10 @@
 
 ### Added
 
+- Added runtime behavior contract tests for completion, tool dispatch, tool errors, model errors, cancellation, policy denial, step limits, event ordering, and stop reasons.
 - Added the root public API contract for agents, runners, models, tools, sessions, events, and policy decisions.
 
 ### Changed
 
+- Deferred retry semantics explicitly in the roadmap until retry behavior can be specified without broad runtime scope.
 - Updated the roadmap to reflect the started public API and contract test slices.

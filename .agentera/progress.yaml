@@ -1,4 +1,18 @@
 cycles:
+  - number: 11
+    timestamp: "2026-05-06 16:28"
+    type: docs
+    phase: build
+    what: Added a runnable minimal app example.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required examples to be honest and runnable while mirroring the README product shape.
+    discovered: The current implemented API can support a local minimal app without relying on the future `goagent.New` facade or network providers.
+    verified: mage check; go run ./examples/minimal
+    next: Add a service example.
+    context:
+      intent: Give users a working no-network starting point for the library runtime.
+      constraints: Keep README aspirational outside roadmap, avoid fake APIs, and keep examples library-first.
+      scope: examples/minimal main, example README, roadmap evidence, TODO, changelog, and progress log.
   - number: 10
     timestamp: "2026-05-06 13:54"
     type: feat

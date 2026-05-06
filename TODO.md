@@ -21,15 +21,13 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Expand policy hooks.
 - [x] Add an OpenAI-compatible provider adapter.
 - [x] Add observability integration points.
+- [x] Add a minimal app example.
 
 ## Now
 
 ## Next
 
 ## Examples
-
-- [ ] Add a minimal app example.
-  - Acceptance: example is runnable and mirrors the README quick start.
 
 - [ ] Add a service example.
   - Acceptance: example shows embedding the runtime in a server-style Go application.

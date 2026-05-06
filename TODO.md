@@ -20,15 +20,11 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add pluggable session storage.
 - [x] Expand policy hooks.
 - [x] Add an OpenAI-compatible provider adapter.
+- [x] Add observability integration points.
 
 ## Now
 
 ## Next
-
-- [ ] Add observability integration points.
-  - Acceptance: applications can attach event sinks without changing run behavior.
-  - Acceptance: OpenTelemetry integration can record model turns, tool calls, latency, errors, policy decisions, retries, and stop reasons where supported.
-  - Acceptance: observability remains optional and does not impose a hosted control plane.
 
 ## Examples
 

@@ -1,4 +1,18 @@
 cycles:
+  - number: 10
+    timestamp: "2026-05-06 13:54"
+    type: feat
+    phase: build
+    what: Added observability integration points through runtime event sinks.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required attachable event sinks without changing run behavior and optional OpenTelemetry integration points.
+    discovered: The existing structured Event stream is sufficient as the stable bridge for logs, traces, UIs, replay, and future OTel adapters.
+    verified: mage check
+    next: Add a minimal app example.
+    context:
+      intent: Let host applications observe runs without coupling the core to a hosted control plane or OTel dependency.
+      constraints: Sinks must be optional and must not control run behavior; README stays aspirational outside roadmap.
+      scope: EventSink API, EventSinkFunc adapter, runner sink fanout, panic isolation, tests, README roadmap, TODO, changelog, and progress log.
   - number: 9
     timestamp: "2026-05-06 12:52"
     type: feat

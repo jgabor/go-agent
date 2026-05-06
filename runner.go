@@ -33,6 +33,12 @@ func NewRunner(agent Agent) (Runner, error) {
 		specs = append(specs, toolSpec(tool))
 	}
 
+	for _, sink := range agent.EventSinks {
+		if sink == nil {
+			return nil, fmt.Errorf("goagent: agent event sink cannot be nil")
+		}
+	}
+
 	policy := agent.Policy
 	policyExplicit := true
 	if policy == nil {
@@ -48,6 +54,7 @@ func NewRunner(agent Agent) (Runner, error) {
 		policy:         policy,
 		policyExplicit: policyExplicit,
 		sessionStore:   agent.SessionStore,
+		eventSinks:     append([]EventSink(nil), agent.EventSinks...),
 	}, nil
 }
 
@@ -59,6 +66,7 @@ type runner struct {
 	policy         Policy
 	policyExplicit bool
 	sessionStore   SessionStore
+	eventSinks     []EventSink
 }
 
 func (r *runner) Run(ctx context.Context, request RunRequest) (RunResult, error) {
@@ -84,9 +92,11 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 
 	state := runState{
 		runID:   fmt.Sprintf("run-%d", nextRunID.Add(1)),
+		ctx:     ctx,
 		request: request,
 		session: session,
 		emit:    emit,
+		sinks:   r.eventSinks,
 	}
 	if request.Input != "" {
 		state.session.Messages = append(state.session.Messages, Message{Role: RoleUser, Content: request.Input})
@@ -256,11 +266,13 @@ func (r *runner) decide(ctx context.Context, state *runState, turnID string, dec
 
 type runState struct {
 	runID   string
+	ctx     context.Context
 	request RunRequest
 	session Session
 	text    string
 	seq     int64
 	emit    func(Event)
+	sinks   []EventSink
 	events  []Event
 }
 
@@ -270,6 +282,16 @@ func (s *runState) send(event Event) {
 	event.RunID = s.runID
 	s.events = append(s.events, event)
 	s.emit(event)
+	s.notifySinks(event)
+}
+
+func (s *runState) notifySinks(event Event) {
+	for _, sink := range s.sinks {
+		func() {
+			defer func() { _ = recover() }()
+			sink.HandleEvent(s.ctx, event)
+		}()
+	}
 }
 
 func (s *runState) fail(reason StopReason, event Event) RunResult {

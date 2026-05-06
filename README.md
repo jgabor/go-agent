@@ -316,7 +316,7 @@ This table reflects the repository today.
 | Streaming               | Structured event stream for runs                        | Started        | Runner Stream with event correlation tests |
 | Sessions                | Pluggable session storage                               | Started        | SessionStore and memory store exist        |
 | Providers               | OpenAI-compatible provider adapter                      | Started        | `providers/openai` chat adapter exists     |
-| Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists                     |
+| Observability           | Event sink and OpenTelemetry integration                | Started        | EventSink hooks observe runtime events     |
 | Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Run/tool/result decisions in events        |
 | Tests                   | Unit and integration coverage for runtime behavior      | Started        | API and behavior contract tests exist      |
 | Examples                | Minimal app, service, worker, and CLI examples          | Not started    | No examples directory exists               |

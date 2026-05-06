@@ -7,6 +7,7 @@
 - Added `NewRunner` implementing the core agent loop with model turns, tool dispatch, policy checks, event emission, session tracking, step limits, and cancellation.
 - Added expanded policy decisions for run-start constraints, tool-call constraints, and tool-result validation with structured policy events.
 - Added `providers/openai` with an OpenAI-compatible chat completions model adapter.
+- Added `EventSink` hooks for optional logging, tracing, UI, replay, and OpenTelemetry adapters.
 - Added streaming behavior tests covering multi-turn tool dispatch, event ordering and correlation, error stops, cancellation, and Run/Stream parity.
 - Added struct-input tool schema generation and `NewToolWithSchema` for explicit schema metadata.
 - Added `SessionStore`, `RunRequest.SessionID`, and `NewMemorySessionStore` for resumable pluggable session storage.

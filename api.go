@@ -12,6 +12,7 @@ type Agent struct {
 	Tools        []Tool
 	Policy       Policy
 	SessionStore SessionStore
+	EventSinks   []EventSink
 }
 
 // Runner executes an agent run and emits structured runtime events.
@@ -142,6 +143,19 @@ type Event struct {
 	PolicyDecision PolicyDecision
 	StopReason     StopReason
 	Err            error
+}
+
+// EventSink observes runtime events without controlling run behavior.
+type EventSink interface {
+	HandleEvent(context.Context, Event)
+}
+
+// EventSinkFunc adapts a function to the EventSink interface.
+type EventSinkFunc func(context.Context, Event)
+
+// HandleEvent calls f(ctx, event).
+func (f EventSinkFunc) HandleEvent(ctx context.Context, event Event) {
+	f(ctx, event)
 }
 
 // EventKind identifies the kind of runtime event.

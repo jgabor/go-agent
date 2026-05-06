@@ -23,15 +23,13 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add observability integration points.
 - [x] Add a minimal app example.
 - [x] Add a service example.
+- [x] Add a worker example.
 
 ## Now
 
 ## Next
 
 ## Examples
-
-- [ ] Add a worker example.
-  - Acceptance: example shows cancellation, deadlines, retries if implemented, or background processing.
 
 - [ ] Add a CLI example.
   - Acceptance: example demonstrates a command-line consumer without turning the project into a CLI-first product.

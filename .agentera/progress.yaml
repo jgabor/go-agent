@@ -1,4 +1,18 @@
 cycles:
+  - number: 13
+    timestamp: "2026-05-06 17:12"
+    type: docs
+    phase: build
+    what: Added a runnable worker example for background job processing.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required a worker example showing cancellation, deadlines, and background processing.
+    discovered: The current runtime covers background jobs with per-job context deadlines, session IDs, tool calls, and event sinks without retry support.
+    verified: mage check; go run ./examples/worker
+    next: Add a CLI example.
+    context:
+      intent: Show host applications how to use go-agent in background job workers.
+      constraints: Keep retry behavior deferred, keep example local/no-network, and keep README aspirational outside roadmap.
+      scope: examples/worker main, tests, README, roadmap evidence, TODO, changelog, and progress log.
   - number: 12
     timestamp: "2026-05-06 16:43"
     type: docs

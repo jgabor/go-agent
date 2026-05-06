@@ -11,6 +11,7 @@
 - Added a runnable minimal app example using `NewRunner`, `NewTool`, a local model, and event sinks.
 - Added a runnable HTTP service example embedding the runtime with sessions, policy, and event sinks.
 - Added a runnable worker example with background jobs, deadlines, cancellation, sessions, and event logging.
+- Added a runnable CLI consumer example with final-text and structured-event output modes.
 - Added streaming behavior tests covering multi-turn tool dispatch, event ordering and correlation, error stops, cancellation, and Run/Stream parity.
 - Added struct-input tool schema generation and `NewToolWithSchema` for explicit schema metadata.
 - Added `SessionStore`, `RunRequest.SessionID`, and `NewMemorySessionStore` for resumable pluggable session storage.

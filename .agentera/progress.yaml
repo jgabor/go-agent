@@ -1,4 +1,18 @@
 cycles:
+  - number: 14
+    timestamp: "2026-05-06 19:07"
+    type: docs
+    phase: build
+    what: Added a runnable CLI consumer example.
+    commit: "Recorded before commit; see git history for resulting hash"
+    inspiration: The backlog required a command-line consumer example without making the project CLI-first.
+    discovered: The implemented runtime can support a simple CLI app with final text and structured stream modes while keeping the library as the product center.
+    verified: mage check; go run ./examples/cli -input "Weather in Berlin?"; go run ./examples/cli -input "Weather in Tokyo?" -stream
+    next: Consider deferred extension surfaces only when concrete needs appear.
+    context:
+      intent: Show host applications how to consume go-agent from a command-line program.
+      constraints: Keep this under examples, do not add a root developer CLI, keep it local/no-network, and preserve README aspirational sections outside roadmap.
+      scope: examples/cli main, tests, README, roadmap evidence, TODO, changelog, and progress log.
   - number: 13
     timestamp: "2026-05-06 17:12"
     type: docs

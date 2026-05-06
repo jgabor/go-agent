@@ -24,15 +24,13 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add a minimal app example.
 - [x] Add a service example.
 - [x] Add a worker example.
+- [x] Add a CLI example.
 
 ## Now
 
 ## Next
 
 ## Examples
-
-- [ ] Add a CLI example.
-  - Acceptance: example demonstrates a command-line consumer without turning the project into a CLI-first product.
 
 ## Deferred
 

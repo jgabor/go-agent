@@ -319,7 +319,7 @@ This table reflects the repository today.
 | Observability           | Event sink and OpenTelemetry integration                | Started        | EventSink hooks observe runtime events     |
 | Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Run/tool/result decisions in events        |
 | Tests                   | Unit and integration coverage for runtime behavior      | Started        | API and behavior contract tests exist      |
-| Examples                | Minimal app, service, worker, and CLI examples          | Started        | Minimal, service, and worker run locally   |
+| Examples                | Minimal app, service, worker, and CLI examples          | Started        | Minimal, service, worker, and CLI examples |
 | CLI                     | Optional developer CLI around the library               | Deferred       | Library-first direction                    |
 | MCP adapter             | Optional adapter package outside the core               | Won't fix      | Deliberate non-goal for core               |
 | Sub-agent orchestration | Optional coordination package outside the core          | Won't fix      | Deliberate non-goal for core               |

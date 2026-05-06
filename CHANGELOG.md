@@ -5,6 +5,7 @@
 ### Added
 
 - Added `NewRunner` implementing the core agent loop with model turns, tool dispatch, policy checks, event emission, session tracking, step limits, and cancellation.
+- Added expanded policy decisions for run-start constraints, tool-call constraints, and tool-result validation with structured policy events.
 - Added streaming behavior tests covering multi-turn tool dispatch, event ordering and correlation, error stops, cancellation, and Run/Stream parity.
 - Added struct-input tool schema generation and `NewToolWithSchema` for explicit schema metadata.
 - Added `SessionStore`, `RunRequest.SessionID`, and `NewMemorySessionStore` for resumable pluggable session storage.

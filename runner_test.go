@@ -203,6 +203,111 @@ func TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation(t *testing.T) {
 	}
 }
 
+func TestRunnerPolicyCanConstrainToolCallInput(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "Get weather.", func(ctx context.Context, city string) (string, error) {
+		return "clear in " + city, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := goagent.PolicyFunc(func(ctx context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind != goagent.DecisionToolCall {
+			return goagent.PolicyDecision{Allowed: true}, nil
+		}
+		call := decision.ToolCall
+		call.Input = json.RawMessage(`{"city":"Berlin"}`)
+		return goagent.PolicyDecision{Allowed: true, Reason: "rewrite city", ToolCall: &call}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := model.requests[1].Messages[len(model.requests[1].Messages)-1]; got.Content != "clear in Berlin" {
+		t.Fatalf("tool result message = %+v", got)
+	}
+	var found bool
+	for _, event := range result.Events {
+		if event.Kind == goagent.EventPolicyDecision && event.Decision.Kind == goagent.DecisionToolCall {
+			found = true
+			if event.PolicyDecision.ToolCall == nil || string(event.PolicyDecision.ToolCall.Input) != `{"city":"Berlin"}` {
+				t.Fatalf("policy event = %+v", event)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing tool-call policy decision event")
+	}
+}
+
+func TestRunnerPolicyCanConstrainStepLimit(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "unreached"}},
+	}}
+	tool := namedTool{name: "weather"}
+	policy := goagent.PolicyFunc(func(ctx context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionRunStart {
+			return goagent.PolicyDecision{Allowed: true, Reason: "budget", MaxSteps: 1}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?", MaxSteps: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopStepLimit {
+		t.Fatalf("StopReason = %q, want %q", result.StopReason, goagent.StopStepLimit)
+	}
+	if len(model.requests) != 1 {
+		t.Fatalf("model turns = %d, want 1", len(model.requests))
+	}
+}
+
+func TestRunnerPolicyCanValidateToolResult(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{{
+		ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}},
+	}}}
+	tool := namedTool{name: "weather"}
+	policy := goagent.PolicyFunc(func(ctx context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionToolResult {
+			return goagent.PolicyDecision{Allowed: false, Reason: "blocked output"}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopPolicyDenied {
+		t.Fatalf("StopReason = %q, want %q", result.StopReason, goagent.StopPolicyDenied)
+	}
+	for _, event := range result.Events {
+		if event.Kind == goagent.EventToolResult {
+			t.Fatalf("tool result event emitted after result denial: %+v", result.Events)
+		}
+	}
+}
+
 func TestRunnerStreamEmitsRunEvents(t *testing.T) {
 	model := &recordingModel{turns: []goagent.TurnResult{{Message: goagent.Message{Content: "Done."}}}}
 	runner, err := goagent.NewRunner(goagent.Agent{Model: model})

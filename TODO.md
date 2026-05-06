@@ -18,16 +18,11 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Implement structured streaming events.
 - [x] Expand tool schema support.
 - [x] Add pluggable session storage.
+- [x] Expand policy hooks.
 
 ## Now
 
 ## Next
-
-- [ ] Expand policy hooks.
-  - Acceptance: host applications can allow, deny, or constrain tool execution.
-  - Acceptance: policies can enforce allowlists, budgets, step limits, approvals, authorization, output validation, and environment restrictions.
-  - Acceptance: policy decisions are visible through structured events.
-  - Acceptance: policies remain host-owned and do not become permission-popup theater.
 
 - [ ] Add an OpenAI-compatible provider adapter.
   - Acceptance: adapter packaging matches the API decision from the first slice.

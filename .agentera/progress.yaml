@@ -1,4 +1,18 @@
 cycles:
+  - number: 8
+    timestamp: "2026-05-06 11:28"
+    type: feat
+    phase: build
+    what: Expanded policy hooks for run budgets, tool-call constraints, and tool-result validation.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required allow, deny, constrain, visible decisions, and host-owned enforcement points.
+    discovered: The existing Policy interface can grow through richer Decision and PolicyDecision payloads without adding a permission UI or DSL.
+    verified: mage check
+    next: Add an OpenAI-compatible provider adapter.
+    context:
+      intent: Give host applications policy hooks for budgets, tool input constraints, and output validation.
+      constraints: Keep policies host-owned, structured through events, and independent of provider packages.
+      scope: DecisionKind, policy event payloads, MaxSteps and ToolCall constraints, tool-result validation, tests, README roadmap, TODO, changelog, and progress log.
   - number: 7
     timestamp: "2026-05-06 11:21"
     type: feat

@@ -34,27 +34,31 @@ func NewRunner(agent Agent) (Runner, error) {
 	}
 
 	policy := agent.Policy
+	policyExplicit := true
 	if policy == nil {
 		policy = allowAllPolicy{}
+		policyExplicit = false
 	}
 
 	return &runner{
-		instructions: agent.Instructions,
-		model:        agent.Model,
-		tools:        tools,
-		toolSpecs:    specs,
-		policy:       policy,
-		sessionStore: agent.SessionStore,
+		instructions:   agent.Instructions,
+		model:          agent.Model,
+		tools:          tools,
+		toolSpecs:      specs,
+		policy:         policy,
+		policyExplicit: policyExplicit,
+		sessionStore:   agent.SessionStore,
 	}, nil
 }
 
 type runner struct {
-	instructions string
-	model        Model
-	tools        map[string]Tool
-	toolSpecs    []ToolSpec
-	policy       Policy
-	sessionStore SessionStore
+	instructions   string
+	model          Model
+	tools          map[string]Tool
+	toolSpecs      []ToolSpec
+	policy         Policy
+	policyExplicit bool
+	sessionStore   SessionStore
 }
 
 func (r *runner) Run(ctx context.Context, request RunRequest) (RunResult, error) {
@@ -91,6 +95,16 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 	maxSteps := request.MaxSteps
 	if maxSteps == 0 {
 		maxSteps = defaultMaxSteps
+	}
+	runDecision, err := r.decide(ctx, &state, "", Decision{Kind: DecisionRunStart, Request: request, Session: state.session})
+	if err != nil {
+		return r.saveResult(ctx, state.fail(StopPolicyDenied, Event{Err: err}))
+	}
+	if !runDecision.Allowed {
+		return r.saveResult(ctx, state.finish(StopPolicyDenied))
+	}
+	if runDecision.MaxSteps > 0 && runDecision.MaxSteps < maxSteps {
+		maxSteps = runDecision.MaxSteps
 	}
 
 	for step := 0; ; step++ {
@@ -183,21 +197,41 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 		return &result
 	}
 
-	decision, err := r.policy.Decide(ctx, Decision{ToolCall: call, Tool: toolSpec(tool), Session: state.session})
+	policyDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolCall, ToolCall: call, Tool: toolSpec(tool), Session: state.session})
 	if err != nil {
 		result := state.fail(StopPolicyDenied, Event{TurnID: turnID, ToolCallID: call.ID, Err: err})
 		return &result
 	}
-	state.send(Event{Kind: EventPolicyDecision, TurnID: turnID, ToolCallID: call.ID})
-	if !decision.Allowed {
+	if !policyDecision.Allowed {
 		returnResult := state.finish(StopPolicyDenied)
 		return &returnResult
+	}
+	if policyDecision.ToolCall != nil {
+		constrained := *policyDecision.ToolCall
+		if constrained.Name == "" {
+			constrained.Name = call.Name
+		}
+		if constrained.Name != call.Name {
+			result := state.fail(StopPolicyDenied, Event{TurnID: turnID, ToolCallID: call.ID, Err: fmt.Errorf("goagent: policy cannot change tool %q to %q", call.Name, constrained.Name)})
+			return &result
+		}
+		constrained.ID = call.ID
+		call = constrained
 	}
 
 	toolResult, err := tool.Call(ctx, call)
 	if err != nil {
 		result := state.fail(StopToolError, Event{TurnID: turnID, ToolCallID: call.ID, Err: err})
 		return &result
+	}
+	resultDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolResult, ToolCall: call, Tool: toolSpec(tool), ToolResult: toolResult, Session: state.session})
+	if err != nil {
+		result := state.fail(StopPolicyDenied, Event{TurnID: turnID, ToolCallID: call.ID, Err: err})
+		return &result
+	}
+	if !resultDecision.Allowed {
+		returnResult := state.finish(StopPolicyDenied)
+		return &returnResult
 	}
 	state.session.Messages = append(state.session.Messages, Message{
 		Role:       RoleTool,
@@ -207,6 +241,14 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 	})
 	state.send(Event{Kind: EventToolResult, TurnID: turnID, ToolCallID: call.ID, ToolResult: toolResult})
 	return nil
+}
+
+func (r *runner) decide(ctx context.Context, state *runState, turnID string, decision Decision) (PolicyDecision, error) {
+	policyDecision, err := r.policy.Decide(ctx, decision)
+	if r.policyExplicit || decision.Kind == DecisionToolCall {
+		state.send(Event{Kind: EventPolicyDecision, TurnID: turnID, ToolCallID: decision.ToolCall.ID, Decision: decision, PolicyDecision: policyDecision})
+	}
+	return policyDecision, err
 }
 
 type runState struct {

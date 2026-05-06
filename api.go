@@ -128,17 +128,19 @@ type SessionStore interface {
 // Event is a structured record emitted while a run proceeds.
 type Event struct {
 	// Sequence is a run-local, monotonically increasing event number.
-	Sequence   int64
-	Kind       EventKind
-	RunID      string
-	TurnID     string
-	ToolCallID string
-	Text       string
-	Message    Message
-	ToolCall   ToolCall
-	ToolResult ToolResult
-	StopReason StopReason
-	Err        error
+	Sequence       int64
+	Kind           EventKind
+	RunID          string
+	TurnID         string
+	ToolCallID     string
+	Text           string
+	Message        Message
+	ToolCall       ToolCall
+	ToolResult     ToolResult
+	Decision       Decision
+	PolicyDecision PolicyDecision
+	StopReason     StopReason
+	Err            error
 }
 
 // EventKind identifies the kind of runtime event.
@@ -190,15 +192,32 @@ func (f PolicyFunc) Decide(ctx context.Context, decision Decision) (PolicyDecisi
 	return f(ctx, decision)
 }
 
+// DecisionKind identifies the runtime decision being presented to policy.
+type DecisionKind string
+
+const (
+	// DecisionRunStart lets policy allow, deny, or constrain a run before model work starts.
+	DecisionRunStart DecisionKind = "run_start"
+	// DecisionToolCall lets policy allow, deny, or constrain a tool call before execution.
+	DecisionToolCall DecisionKind = "tool_call"
+	// DecisionToolResult lets policy validate tool output before it is returned to the model.
+	DecisionToolResult DecisionKind = "tool_result"
+)
+
 // Decision describes an action that policy can allow, deny, or constrain.
 type Decision struct {
-	ToolCall ToolCall
-	Tool     ToolSpec
-	Session  Session
+	Kind       DecisionKind
+	Request    RunRequest
+	ToolCall   ToolCall
+	Tool       ToolSpec
+	ToolResult ToolResult
+	Session    Session
 }
 
 // PolicyDecision is the host policy's answer for a runtime decision.
 type PolicyDecision struct {
-	Allowed bool
-	Reason  string
+	Allowed  bool
+	Reason   string
+	MaxSteps int
+	ToolCall *ToolCall
 }

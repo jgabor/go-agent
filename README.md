@@ -317,7 +317,7 @@ This table reflects the repository today.
 | Sessions                | Pluggable session storage                               | Started        | SessionStore and memory store exist        |
 | Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists                 |
 | Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists                     |
-| Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Default allow-all and host Policy in loop  |
+| Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Run/tool/result decisions in events        |
 | Tests                   | Unit and integration coverage for runtime behavior      | Started        | API and behavior contract tests exist      |
 | Examples                | Minimal app, service, worker, and CLI examples          | Not started    | No examples directory exists               |
 | CLI                     | Optional developer CLI around the library               | Deferred       | Library-first direction                    |

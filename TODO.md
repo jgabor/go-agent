@@ -15,14 +15,9 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Implement minimal function tools for the README quick start.
 - [x] Implement the core agent loop.
 - [x] Implement minimal policy hooks in the core loop.
+- [x] Implement structured streaming events.
 
 ## Now
-
-- [ ] Implement structured streaming events.
-  - Acceptance: runs emit events for text deltas, tool calls, tool results, errors, policy decisions, and stops.
-  - Acceptance: events include enough ordering and correlation data to pair tool calls with results and reconstruct a run.
-  - Acceptance: stream consumers can reconstruct a run without parsing final text.
-  - Acceptance: event structs are suitable for logs, traces, UIs, tests, and replay without exposing provider-specific internals.
 
 ## Next
 

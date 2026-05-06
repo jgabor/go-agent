@@ -1,4 +1,18 @@
 cycles:
+  - number: 5
+    timestamp: "2026-05-06 10:31"
+    type: test
+    phase: build
+    what: Added streaming behavior tests verifying structured events through the Stream channel.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The runner already implements Stream; the gap was test coverage for multi-turn, error, cancellation, and event correlation in streaming mode.
+    discovered: Stream and Run produce identical event kind sequences, confirming the shared run() core works correctly.
+    verified: mage check
+    next: Expand tool schema support or add pluggable session storage.
+    context:
+      intent: Verify structured streaming events meet all TODO acceptance criteria without new runtime code.
+      constraints: README stays aspirational outside roadmap; streaming already works in runner.
+      scope: stream_test.go with 6 tests, TODO update, CHANGELOG entry, README roadmap Streaming Started, progress log.
   - number: 4
     timestamp: "2026-05-06 09:36"
     type: feat

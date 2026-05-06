@@ -11,6 +11,7 @@ type Agent struct {
 	Model        Model
 	Tools        []Tool
 	Policy       Policy
+	SessionStore SessionStore
 }
 
 // Runner executes an agent run and emits structured runtime events.
@@ -21,8 +22,10 @@ type Runner interface {
 
 // RunRequest is the host application's request to execute one agent run.
 type RunRequest struct {
-	Input   string
-	Session Session
+	Input string
+	// SessionID resumes a stored session by stable host-provided identifier.
+	SessionID string
+	Session   Session
 	// MaxSteps limits model turns in one run. Zero means the runtime default applies.
 	MaxSteps int
 }
@@ -114,6 +117,12 @@ type Session struct {
 	ID       string
 	Messages []Message
 	Values   map[string]any
+}
+
+// SessionStore persists conversation state outside the runner.
+type SessionStore interface {
+	LoadSession(context.Context, string) (Session, error)
+	SaveSession(context.Context, Session) error
 }
 
 // Event is a structured record emitted while a run proceeds.

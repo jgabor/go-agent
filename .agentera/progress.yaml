@@ -1,4 +1,18 @@
 cycles:
+  - number: 7
+    timestamp: "2026-05-06 11:21"
+    type: feat
+    phase: build
+    what: Added pluggable session storage with a SessionStore interface and in-memory implementation.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: The backlog required runtime storage through an interface, persisted transcript/tool state, in-memory support, and stable resume IDs.
+    discovered: Existing Session state already carried transcript and metadata; the missing piece was loading/saving it through the runner.
+    verified: mage check
+    next: Expand policy hooks.
+    context:
+      intent: Let callers resume runs by stable session ID without binding the runtime to a database.
+      constraints: Keep storage host-owned, ordinary Go, and out of provider/constructor scope.
+      scope: SessionStore API, RunRequest.SessionID, NewMemorySessionStore, runner load/save integration, session tests, README roadmap, TODO, changelog, and progress log.
   - number: 6
     timestamp: "2026-05-06 11:12"
     type: feat

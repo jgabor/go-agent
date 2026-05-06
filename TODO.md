@@ -17,16 +17,11 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Implement minimal policy hooks in the core loop.
 - [x] Implement structured streaming events.
 - [x] Expand tool schema support.
+- [x] Add pluggable session storage.
 
 ## Now
 
 ## Next
-
-- [ ] Add pluggable session storage.
-  - Acceptance: runtime depends on a session store interface, not a concrete database.
-  - Acceptance: session state defines what model transcript, tool results, and runtime metadata are persisted.
-  - Acceptance: in-memory session storage supports tests and examples.
-  - Acceptance: callers can resume a run with a stable session identifier.
 
 - [ ] Expand policy hooks.
   - Acceptance: host applications can allow, deny, or constrain tool execution.

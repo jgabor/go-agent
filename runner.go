@@ -44,6 +44,7 @@ func NewRunner(agent Agent) (Runner, error) {
 		tools:        tools,
 		toolSpecs:    specs,
 		policy:       policy,
+		sessionStore: agent.SessionStore,
 	}, nil
 }
 
@@ -53,6 +54,7 @@ type runner struct {
 	tools        map[string]Tool
 	toolSpecs    []ToolSpec
 	policy       Policy
+	sessionStore SessionStore
 }
 
 func (r *runner) Run(ctx context.Context, request RunRequest) (RunResult, error) {
@@ -71,13 +73,17 @@ func (r *runner) Stream(ctx context.Context, request RunRequest) (<-chan Event, 
 }
 
 func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) (RunResult, error) {
+	session, err := r.sessionForRequest(ctx, request)
+	if err != nil {
+		return RunResult{}, err
+	}
+
 	state := runState{
 		runID:   fmt.Sprintf("run-%d", nextRunID.Add(1)),
 		request: request,
-		session: cloneSession(request.Session),
+		session: session,
 		emit:    emit,
 	}
-	state.session.Messages = append([]Message(nil), request.Session.Messages...)
 	if request.Input != "" {
 		state.session.Messages = append(state.session.Messages, Message{Role: RoleUser, Content: request.Input})
 	}
@@ -89,10 +95,10 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 
 	for step := 0; ; step++ {
 		if err := ctx.Err(); err != nil {
-			return state.fail(StopCanceled, Event{Err: err}), nil
+			return r.saveResult(ctx, state.fail(StopCanceled, Event{Err: err}))
 		}
 		if step >= maxSteps {
-			return state.finish(StopStepLimit), nil
+			return r.saveResult(ctx, state.finish(StopStepLimit))
 		}
 
 		turnID := fmt.Sprintf("turn-%d", step+1)
@@ -103,7 +109,7 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			Session:      state.session,
 		})
 		if err != nil {
-			return state.fail(StopModelError, Event{TurnID: turnID, Err: err}), nil
+			return r.saveResult(ctx, state.fail(StopModelError, Event{TurnID: turnID, Err: err}))
 		}
 
 		if turn.Message.Content != "" || turn.Message.Role != "" {
@@ -122,15 +128,50 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			if turn.StopReason == "" {
 				turn.StopReason = StopComplete
 			}
-			return state.finish(turn.StopReason), nil
+			return r.saveResult(ctx, state.finish(turn.StopReason))
 		}
 
 		for _, call := range turn.ToolCalls {
 			if err := r.callTool(ctx, &state, turnID, call); err != nil {
-				return *err, nil
+				return r.saveResult(ctx, *err)
 			}
 		}
 	}
+}
+
+func (r *runner) sessionForRequest(ctx context.Context, request RunRequest) (Session, error) {
+	session := cloneSession(request.Session)
+	sessionID := request.SessionID
+	if sessionID == "" {
+		sessionID = session.ID
+	}
+	if sessionID != "" {
+		session.ID = sessionID
+	}
+
+	if r.sessionStore == nil || sessionID == "" {
+		return session, nil
+	}
+
+	stored, err := r.sessionStore.LoadSession(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if len(stored.Messages) == 0 && stored.Values == nil {
+		return session, nil
+	}
+	stored.ID = sessionID
+	return cloneSession(stored), nil
+}
+
+func (r *runner) saveResult(ctx context.Context, result RunResult) (RunResult, error) {
+	if r.sessionStore == nil || result.Session.ID == "" {
+		return result, nil
+	}
+	if err := r.sessionStore.SaveSession(ctx, result.Session); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (r *runner) callTool(ctx context.Context, state *runState, turnID string, call ToolCall) *RunResult {

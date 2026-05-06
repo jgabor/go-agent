@@ -10,8 +10,7 @@ DSL.
 
 go-agent ships the primitives. Your application owns the policy.
 
-> Project status: this README describes the intended product shape as if the
-> vision were realized. The [Features & Roadmap](#features--roadmap) table is
+> Project status: this README describes the intended product shape. The [Features & Roadmap](#features--roadmap) table is
 > the source of truth for what exists in this repository today.
 
 ## Table of Contents
@@ -106,14 +105,14 @@ Use go-agent when:
 
 go-agent centers on a few Go-native primitives:
 
-| Primitive | Purpose |
-|-----------|---------|
-| `Agent` | Instructions, model settings, tools, and runtime policy. |
-| `Runner` | Executes the agent loop with context cancellation and event emission. |
-| `Tool` | A typed Go capability the model can request during a run. |
-| `Session` | Conversation state and resumable runtime data. |
-| `Event` | Streaming record of model output, tool calls, errors, and stop reasons. |
-| `Policy` | Host-owned approval, limits, validation, and safety decisions. |
+| Primitive | Purpose                                                                 |
+| --------- | ----------------------------------------------------------------------- |
+| `Agent`   | Instructions, model settings, tools, and runtime policy.                |
+| `Runner`  | Executes the agent loop with context cancellation and event emission.   |
+| `Tool`    | A typed Go capability the model can request during a run.               |
+| `Session` | Conversation state and resumable runtime data.                          |
+| `Event`   | Streaming record of model output, tool calls, errors, and stop reasons. |
+| `Policy`  | Host-owned approval, limits, validation, and safety decisions.          |
 
 The runtime handles the repetitive machinery:
 
@@ -301,66 +300,28 @@ The repository uses a small Go-first DX baseline:
 - Vulnerability scanning: `govulncheck`
 - Local hooks: `lefthook`
 
-Install the verification tools:
-
-```bash
-go install github.com/magefile/mage@v1.17.2
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.1
-go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
-```
-
-Run the canonical gates:
-
-```bash
-mage -l
-mage check
-```
-
-Individual gates are also available:
-
-```bash
-mage tidy
-mage tidyCheck
-mage test
-mage vet
-mage lint
-mage vuln
-```
-
-Until Go packages exist, package-dependent gates skip with a clear message
-instead of forcing placeholder runtime code into the repository.
-
-Optional local hooks:
-
-```bash
-lefthook install
-```
-
-CI runs `mage check` on pushes and pull requests targeting `main`.
+Contributor and agent workflow details live in `AGENTS.md`. CI runs `mage check`
+on pushes and pull requests targeting `main`.
 
 ## Features & Roadmap
 
 This table reflects the repository today.
 
-| Area | Intended capability | Current status | Evidence |
-|------|---------------------|----------------|----------|
-| README | Product-facing documentation and roadmap | Done | `README.md` |
-| Go module | `go.mod` and importable package | Done | `go.mod` declares `github.com/jgabor/go-agent` |
-| DX baseline | Formatting, linting, local hooks, and canonical gates | Done | `.editorconfig`, `.golangci.yml`, `.lefthook.yml`, `magefile.go` |
-| CI | Remote verification for the DX baseline | Done | `.github/workflows/ci.yml` runs `mage check` |
-| Public API | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Not started | No Go source exists |
-| Agent loop | Model turn loop with tool dispatch and stop reasons | Not started | No runtime code exists |
-| Tool schemas | Go function and struct schema support | Not started | No runtime code exists |
-| Streaming | Structured event stream for runs | Not started | No runtime code exists |
-| Sessions | Pluggable session storage | Not started | No runtime code exists |
-| Providers | OpenAI-compatible provider adapter | Not started | No provider package exists |
-| Observability | Event sink and OpenTelemetry integration | Not started | No runtime code exists |
-| Policy hooks | Approval, limits, validation, and authorization hooks | Not started | No runtime code exists |
-| Tests | Unit and integration coverage for runtime behavior | Not started | No runtime test files exist |
-| Examples | Minimal app, service, worker, and CLI examples | Not started | No examples directory exists |
-| CLI | Optional developer CLI around the library | Deferred | Library-first direction |
-| MCP adapter | Optional adapter package outside the core | Deferred | Deliberate non-goal for core |
-| Sub-agent orchestration | Optional coordination package outside the core | Deferred | Deliberate non-goal for core |
+| Area                    | Intended capability                                     | Current status | Evidence                     |
+| ----------------------- | ------------------------------------------------------- | -------------- | ---------------------------- |
+| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Not started    | No Go source exists          |
+| Agent loop              | Model turn loop with tool dispatch and stop reasons     | Not started    | No runtime code exists       |
+| Tool schemas            | Go function and struct schema support                   | Not started    | No runtime code exists       |
+| Streaming               | Structured event stream for runs                        | Not started    | No runtime code exists       |
+| Sessions                | Pluggable session storage                               | Not started    | No runtime code exists       |
+| Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists   |
+| Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists       |
+| Policy hooks            | Approval, limits, validation, and authorization hooks   | Not started    | No runtime code exists       |
+| Tests                   | Unit and integration coverage for runtime behavior      | Not started    | No runtime test files exist  |
+| Examples                | Minimal app, service, worker, and CLI examples          | Not started    | No examples directory exists |
+| CLI                     | Optional developer CLI around the library               | Deferred       | Library-first direction      |
+| MCP adapter             | Optional adapter package outside the core               | Deferred       | Deliberate non-goal for core |
+| Sub-agent orchestration | Optional coordination package outside the core          | Deferred       | Deliberate non-goal for core |
 
 ## Philosophy
 
@@ -389,18 +350,10 @@ events, not the center of the architecture.
 **No hidden shell.** Execution belongs to explicit tools with visible inputs,
 outputs, and errors.
 
-## Contributing
+## Acknowledgements
 
-The project is pre-implementation. The first useful contributions are design and
-runtime foundations:
-
-- Keep roadmap status aligned with repository reality.
-- Run `mage check` before proposing changes.
-- Define the smallest public API that satisfies the quick start.
-- Build tests before broadening features.
-- Keep examples honest and runnable.
-- Resist adding platform features to the core.
+Inspired by and modeled after [Pi](https://pi.dev).
 
 ## License
 
-TBD.
+MIT. Jonathan Gabor ([@jgabor](https://github.com/jgabor)).

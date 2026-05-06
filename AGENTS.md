@@ -2,7 +2,7 @@
 
 ## Current Reality
 
-- This repo is pre-implementation. The README quick-start/API examples are aspirational; the Features & Roadmap table is the current source of truth.
+- This repo is pre-implementation. The README quick-start/API examples are aspirational; the Features & Roadmap table is the current source of truth for product/runtime capability status, not completed setup history.
 - There are no Go packages yet. Do not add placeholder runtime code just to make `go test ./...`, `go vet ./...`, `golangci-lint`, or `govulncheck` do work.
 - Product direction lives in `.agentera/vision.yaml`: library-first Go agent runtime, CLI second, no hosted platform or workflow DSL by default.
 
@@ -13,7 +13,14 @@
 - Full local gate: `mage check`.
 - Focused gates: `mage tidyCheck`, `mage test`, `mage vet`, `mage lint`, `mage vuln`.
 - With no packages, package-dependent Mage targets intentionally print `skip <gate>: no Go packages yet` and succeed.
-- Local hooks are optional: `lefthook install`. The configured hooks are Go-only and call Mage; they do not run Markdown/JSON formatters.
+- Local hooks are optional: `lefthook install`. The configured hooks call Mage for Go gates and Prettier for staged Markdown/JSON files.
+
+## README And Roadmap Hygiene
+
+- Keep detailed contributor, agent, tool-install, and verification instructions in `AGENTS.md`; keep `README.md` focused on product shape, public usage, and high-level contribution entry points.
+- Do not use the README Features & Roadmap table to document every completed repository setup task. Excluded examples include README publication, `go.mod` initialization, DX baseline setup, and CI setup.
+- Use the roadmap for user-visible or architecture-significant capabilities: public API, runtime loop, tools, streaming, sessions, providers, observability, policy hooks, tests, examples, and explicitly deferred extension surfaces.
+- Keep roadmap statuses aligned with repository reality when product/runtime capabilities start or finish.
 
 ## Tooling Contracts
 
@@ -28,3 +35,10 @@
 - Keep the core library-first: ordinary Go interfaces, `context.Context`, errors, tests, and modules before new abstractions.
 - Do not add Wails, Bun, Playwright, AUR packaging, git-cliff release automation, schema generation hooks, MCP core requirements, baked-in sub-agent orchestration, or a workflow DSL unless a new plan explicitly calls for it.
 - Public API names should stay plain Go vocabulary from the vision: `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy`.
+
+## Contribution Priorities
+
+- Define the smallest public API that satisfies the README quick start.
+- Build tests before broadening features.
+- Keep examples honest and runnable.
+- Resist adding platform features to the core.

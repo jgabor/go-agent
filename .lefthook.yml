@@ -25,6 +25,14 @@ pre-commit:
     vet:
       run: mage vet
       glob: "*.go"
+    docs:
+      run: npx -y prettier --write {staged_files}
+      stage_fixed: true
+      glob: "*.md"
+    configs:
+      run: npx -y prettier --write {staged_files}
+      stage_fixed: true
+      glob: "*.json"
 
 pre-push:
   commands:

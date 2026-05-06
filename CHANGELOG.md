@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added `NewTool` for adapting minimal `func(context.Context, string) (string, error)` tools with name and input validation.
 - Added runtime behavior contract tests for completion, tool dispatch, tool errors, model errors, cancellation, policy denial, step limits, event ordering, and stop reasons.
 - Added the root public API contract for agents, runners, models, tools, sessions, events, and policy decisions.
 

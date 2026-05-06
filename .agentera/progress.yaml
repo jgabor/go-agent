@@ -1,4 +1,19 @@
 cycles:
+  - number: 3
+    timestamp: "2026-05-06 08:49"
+    type: feat
+    phase: build
+    what: Implemented minimal function tools for the README quick-start shape.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: Standard Go adapter functions, ordinary error wrapping, and the TODO acceptance criteria.
+    discovered: Function tool support can stay honest by supporting only one explicit signature before broader schema work.
+    verified: mage check
+    next: Implement the core agent loop.
+    context:
+      intent: Make ordinary Go functions executable as tools without adding the runner loop yet.
+      constraints: Keep README aspirational outside the roadmap, reject unsupported function shapes clearly, and avoid placeholder schema generation.
+      unknowns: Broader function signatures, struct schemas, and explicit schema overrides remain deferred to the schema expansion slice.
+      scope: NewTool adapter, function-tool tests, README roadmap status, TODO, changelog, and progress log.
   - number: 2
     timestamp: "2026-05-06 08:39"
     type: test

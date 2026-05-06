@@ -12,14 +12,9 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add CI for the canonical `mage check` gate.
 - [x] Lock the first-slice public API contract.
 - [x] Specify runtime behavior with tests before broad implementation.
+- [x] Implement minimal function tools for the README quick start.
 
 ## Now
-
-- [ ] Implement minimal function tools for the README quick start.
-  - Acceptance: ordinary Go functions can be registered as tools for the quick-start case.
-  - Acceptance: tool execution receives `context.Context` and returns real Go errors.
-  - Acceptance: requested tool names and inputs are validated before execution.
-  - Acceptance: unsupported function shapes fail clearly rather than becoming placeholder schema support.
 
 - [ ] Implement the core agent loop.
   - Acceptance: `Runner` sends user input and session state to the model interface.

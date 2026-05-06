@@ -312,7 +312,7 @@ This table reflects the repository today.
 | Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Started        | Root package contract exists               |
 | Agent loop              | Model turn loop with tool dispatch and stop reasons     | Not started    | No runtime code exists                     |
 | Retries                 | Runtime retry policy and retry events                   | Deferred       | Retry semantics deferred by behavior tests |
-| Tool schemas            | Go function and struct schema support                   | Not started    | No runtime code exists                     |
+| Tool schemas            | Go function and struct schema support                   | Started        | Minimal string function tools exist        |
 | Streaming               | Structured event stream for runs                        | Not started    | No runtime code exists                     |
 | Sessions                | Pluggable session storage                               | Not started    | No runtime code exists                     |
 | Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists                 |

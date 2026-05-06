@@ -310,19 +310,19 @@ This table reflects the repository today.
 | Area                    | Intended capability                                     | Current status | Evidence                                   |
 | ----------------------- | ------------------------------------------------------- | -------------- | ------------------------------------------ |
 | Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy` | Started        | Root package contract exists               |
-| Agent loop              | Model turn loop with tool dispatch and stop reasons     | Not started    | No runtime code exists                     |
+| Agent loop              | Model turn loop with tool dispatch and stop reasons     | Started        | `NewRunner` with tool dispatch loop        |
 | Retries                 | Runtime retry policy and retry events                   | Deferred       | Retry semantics deferred by behavior tests |
 | Tool schemas            | Go function and struct schema support                   | Started        | Minimal string function tools exist        |
 | Streaming               | Structured event stream for runs                        | Not started    | No runtime code exists                     |
 | Sessions                | Pluggable session storage                               | Not started    | No runtime code exists                     |
 | Providers               | OpenAI-compatible provider adapter                      | Not started    | No provider package exists                 |
 | Observability           | Event sink and OpenTelemetry integration                | Not started    | No runtime code exists                     |
-| Policy hooks            | Approval, limits, validation, and authorization hooks   | Not started    | No runtime code exists                     |
+| Policy hooks            | Approval, limits, validation, and authorization hooks   | Started        | Default allow-all and host Policy in loop  |
 | Tests                   | Unit and integration coverage for runtime behavior      | Started        | API and behavior contract tests exist      |
 | Examples                | Minimal app, service, worker, and CLI examples          | Not started    | No examples directory exists               |
 | CLI                     | Optional developer CLI around the library               | Deferred       | Library-first direction                    |
-| MCP adapter             | Optional adapter package outside the core               | Deferred       | Deliberate non-goal for core               |
-| Sub-agent orchestration | Optional coordination package outside the core          | Deferred       | Deliberate non-goal for core               |
+| MCP adapter             | Optional adapter package outside the core               | Won't fix      | Deliberate non-goal for core               |
+| Sub-agent orchestration | Optional coordination package outside the core          | Won't fix      | Deliberate non-goal for core               |
 
 ## Philosophy
 

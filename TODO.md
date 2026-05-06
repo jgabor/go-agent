@@ -13,20 +13,10 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Lock the first-slice public API contract.
 - [x] Specify runtime behavior with tests before broad implementation.
 - [x] Implement minimal function tools for the README quick start.
+- [x] Implement the core agent loop.
+- [x] Implement minimal policy hooks in the core loop.
 
 ## Now
-
-- [ ] Implement the core agent loop.
-  - Acceptance: `Runner` sends user input and session state to the model interface.
-  - Acceptance: requested tools are validated, executed with `context.Context`, and fed back to the model.
-  - Acceptance: runs stop on completion, error, policy denial, step limit, or cancellation.
-  - Acceptance: the loop is usable by `Run` and does not require a hosted platform, workflow DSL, or background shell.
-
-- [ ] Implement minimal policy hooks in the core loop.
-  - Acceptance: default policy allows safe execution without extra configuration.
-  - Acceptance: host applications can deny tool execution before the tool runs.
-  - Acceptance: policy denial produces a stop reason and structured event.
-  - Acceptance: advanced allowlists, budgets, approvals, authorization, and validation can be added without replacing the core interface.
 
 - [ ] Implement structured streaming events.
   - Acceptance: runs emit events for text deltas, tool calls, tool results, errors, policy decisions, and stops.

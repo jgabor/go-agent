@@ -1,4 +1,19 @@
 cycles:
+  - number: 4
+    timestamp: "2026-05-06 09:36"
+    type: feat
+    phase: build
+    what: Implemented the core agent loop and minimal policy hooks.
+    commit: "Pending at log time; commit requested in same cycle"
+    inspiration: Runtime behavior contract tests defined the specification; the runner implements it.
+    discovered: The default allow-all policy and host Policy interface cover minimal policy hooks without a separate slice.
+    verified: mage check
+    next: Implement structured streaming events.
+    context:
+      intent: Make the runner loop real with tool dispatch, session tracking, and policy hooks.
+      constraints: Keep README aspirational outside the roadmap, use existing API types, no providers, no hosted platform.
+      unknowns: Constructor options (New/WithModel/OpenAI) remain deferred to a future constructor slice.
+      scope: NewRunner, runner loop, policy hooks, runner tests, README roadmap, TODO, changelog, and progress log.
   - number: 3
     timestamp: "2026-05-06 08:49"
     type: feat

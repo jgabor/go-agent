@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	goagent "github.com/jgabor/go-agent"
 )
@@ -75,6 +76,82 @@ func TestRunnerSendsInputSessionInstructionsAndToolsToModel(t *testing.T) {
 	}
 	if got := result.Session.Messages[len(result.Session.Messages)-1]; got.Role != goagent.RoleAssistant || got.Content != "Bring a jacket." {
 		t.Fatalf("last result session message = %+v", got)
+	}
+}
+
+func TestRunnerExposesAdvancedToolDefinitionMetadata(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather with an explicit schema.",
+		Schema: goagent.ToolSchema{
+			"type": "object",
+			"properties": map[string]any{
+				"city": map[string]any{"type": "string", "description": "City name."},
+			},
+			"required": []string{"city"},
+		},
+		Function: func(context.Context, string) (string, error) {
+			return "clear in Austin", nil
+		},
+		Safety:      goagent.ToolSafety{ReadOnly: true, Retryable: true},
+		Constraints: goagent.ToolConstraints{Timeout: time.Second, MaxOutputBytes: 64},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decisions []goagent.Decision
+	policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		decisions = append(decisions, decision)
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	requestTool := model.requests[0].Tools[0]
+	assertAdvancedToolSpec(t, requestTool)
+	var sawToolCallDecision, sawToolResultDecision bool
+	for _, decision := range decisions {
+		if decision.Kind == goagent.DecisionToolCall {
+			sawToolCallDecision = true
+			assertAdvancedToolSpec(t, decision.Tool)
+		}
+		if decision.Kind == goagent.DecisionToolResult {
+			sawToolResultDecision = true
+			assertAdvancedToolSpec(t, decision.Tool)
+		}
+	}
+	if !sawToolCallDecision || !sawToolResultDecision {
+		t.Fatalf("decisions missing tool metadata: %+v", decisions)
+	}
+	var sawToolCallEvent, sawToolResultEvent, sawPolicyEvent bool
+	for _, event := range result.Events {
+		if event.Kind == goagent.EventToolCall {
+			sawToolCallEvent = true
+			assertAdvancedToolSpec(t, event.Tool)
+		}
+		if event.Kind == goagent.EventToolResult {
+			sawToolResultEvent = true
+			assertAdvancedToolSpec(t, event.Tool)
+		}
+		if event.Kind == goagent.EventPolicyDecision && event.Decision.Kind == goagent.DecisionToolCall {
+			sawPolicyEvent = true
+			assertAdvancedToolSpec(t, event.Tool)
+			assertAdvancedToolSpec(t, event.Decision.Tool)
+		}
+	}
+	if !sawToolCallEvent || !sawToolResultEvent || !sawPolicyEvent {
+		t.Fatalf("events missing advanced tool metadata: %+v", result.Events)
 	}
 }
 
@@ -326,6 +403,19 @@ func TestRunnerStreamEmitsRunEvents(t *testing.T) {
 	}
 	if !slices.Equal(kinds, []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop}) {
 		t.Fatalf("stream event kinds = %v", kinds)
+	}
+}
+
+func assertAdvancedToolSpec(t *testing.T, spec goagent.ToolSpec) {
+	t.Helper()
+	if spec.Name != "weather" || spec.Description == "" || spec.Schema["type"] != "object" {
+		t.Fatalf("ToolSpec model metadata = %+v", spec)
+	}
+	if !spec.Safety.ReadOnly || !spec.Safety.Retryable {
+		t.Fatalf("ToolSpec safety metadata = %+v", spec.Safety)
+	}
+	if spec.Constraints.Timeout != time.Second || spec.Constraints.MaxOutputBytes != 64 {
+		t.Fatalf("ToolSpec constraints = %+v", spec.Constraints)
 	}
 }
 

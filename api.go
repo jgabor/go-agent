@@ -3,6 +3,7 @@ package goagent
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Agent describes the model, tools, instructions, and policy used for a run.
@@ -13,6 +14,8 @@ type Agent struct {
 	Policy       Policy
 	SessionStore SessionStore
 	EventSinks   []EventSink
+	// Retry enables bounded retry for model, runtime-owned, and retry-safe tool failures. Zero means disabled.
+	Retry RetryPolicy
 }
 
 // Runner executes an agent run and emits structured runtime events.
@@ -90,11 +93,43 @@ type Tool interface {
 	Call(context.Context, ToolCall) (ToolResult, error)
 }
 
+// ToolDefinition is the advanced authoring path for tools that need explicit
+// runtime metadata beyond the low-friction NewTool helper.
+type ToolDefinition struct {
+	Name        string
+	Description string
+	Schema      ToolSchema
+	Function    any
+	Safety      ToolSafety
+	Constraints ToolConstraints
+}
+
+// ToolSafety carries policy-visible information about side effects and retry safety.
+// Retryable must be true before the runtime will consider repeating a failed tool call.
+type ToolSafety struct {
+	ReadOnly  bool
+	Retryable bool
+}
+
+// ToolConstraints carries runtime-relevant execution constraints for a tool.
+type ToolConstraints struct {
+	Timeout        time.Duration
+	MaxOutputBytes int
+}
+
+// ToolMetadata is runtime metadata exposed by advanced tool implementations.
+type ToolMetadata struct {
+	Safety      ToolSafety
+	Constraints ToolConstraints
+}
+
 // ToolSpec is the model-visible description of a tool.
 type ToolSpec struct {
 	Name        string
 	Description string
 	Schema      ToolSchema
+	Safety      ToolSafety
+	Constraints ToolConstraints
 }
 
 // ToolSchema describes accepted tool input without tying the core to one schema generator.
@@ -137,10 +172,12 @@ type Event struct {
 	ToolCallID     string
 	Text           string
 	Message        Message
+	Tool           ToolSpec
 	ToolCall       ToolCall
 	ToolResult     ToolResult
 	Decision       Decision
 	PolicyDecision PolicyDecision
+	Retry          RetryEvent
 	StopReason     StopReason
 	Err            error
 }
@@ -170,6 +207,8 @@ const (
 	EventToolResult EventKind = "tool_result"
 	// EventPolicyDecision reports the policy outcome for a runtime decision.
 	EventPolicyDecision EventKind = "policy_decision"
+	// EventRetry reports retry consideration, attempts, skips, and terminal retry outcomes.
+	EventRetry EventKind = "retry"
 	// EventError reports a model, tool, runtime, or policy error.
 	EventError EventKind = "error"
 	// EventStop reports the reason a run stopped.
@@ -192,6 +231,8 @@ const (
 	StopStepLimit StopReason = "step_limit"
 	// StopCanceled means the context canceled before completion.
 	StopCanceled StopReason = "canceled"
+	// StopRetryExhausted means a retryable failure remained after the retry budget was exhausted.
+	StopRetryExhausted StopReason = "retry_exhausted"
 )
 
 // Policy decides whether the runtime may perform a host-owned action.
@@ -217,6 +258,8 @@ const (
 	DecisionToolCall DecisionKind = "tool_call"
 	// DecisionToolResult lets policy validate tool output before it is returned to the model.
 	DecisionToolResult DecisionKind = "tool_result"
+	// DecisionRetry lets policy allow, deny, or constrain a runtime retry before it is attempted.
+	DecisionRetry DecisionKind = "retry"
 )
 
 // Decision describes an action that policy can allow, deny, or constrain.
@@ -226,6 +269,7 @@ type Decision struct {
 	ToolCall   ToolCall
 	Tool       ToolSpec
 	ToolResult ToolResult
+	Retry      RetryContext
 	Session    Session
 }
 
@@ -235,4 +279,103 @@ type PolicyDecision struct {
 	Reason   string
 	MaxSteps int
 	ToolCall *ToolCall
+	Retry    RetryPolicy
 }
+
+// RetryContext is the typed policy-visible context for one considered retry.
+//
+// RetryContext is used with DecisionRetry. It intentionally models retry as a
+// runtime decision, not as an unstructured lifecycle callback.
+type RetryContext struct {
+	Target      RetryTarget
+	Reason      RetryReason
+	Attempt     int
+	MaxAttempts int
+	Request     RunRequest
+	Session     Session
+	TurnID      string
+	ToolCall    ToolCall
+	Tool        ToolSpec
+	Err         error
+}
+
+// RetryPolicy carries policy constraints for an allowed retry decision.
+type RetryPolicy struct {
+	// MaxAttempts constrains the total attempts for this retry target. Zero means
+	// policy did not narrow the runtime's current retry budget.
+	MaxAttempts int
+	// Delay requests a minimum delay before the next attempt. Zero means no
+	// policy-requested delay.
+	Delay time.Duration
+}
+
+// RetryEvent is the structured event payload for EventRetry.
+type RetryEvent struct {
+	Target      RetryTarget
+	Reason      RetryReason
+	Attempt     int
+	MaxAttempts int
+	Outcome     RetryOutcome
+	Delay       time.Duration
+	StopReason  StopReason
+}
+
+// RetryTarget identifies what the runtime is considering or retrying.
+type RetryTarget struct {
+	Kind       RetryTargetKind
+	TurnID     string
+	ToolCallID string
+	ToolName   string
+}
+
+// RetryTargetKind identifies the runtime operation a retry would repeat.
+type RetryTargetKind string
+
+const (
+	// RetryTargetModel identifies a model turn retry.
+	RetryTargetModel RetryTargetKind = "model"
+	// RetryTargetRuntime identifies a runtime-owned operation retry.
+	RetryTargetRuntime RetryTargetKind = "runtime"
+	// RetryTargetTool is reserved until policy-visible tool safety metadata exists.
+	RetryTargetTool RetryTargetKind = "tool"
+)
+
+// RetryReason is a structured explanation for why retry was considered.
+type RetryReason string
+
+const (
+	// RetryReasonModelError means a model turn returned an error.
+	RetryReasonModelError RetryReason = "model_error"
+	// RetryReasonRuntimeError means a runtime-owned operation returned an error.
+	RetryReasonRuntimeError RetryReason = "runtime_error"
+	// RetryReasonToolError means a retryable tool call returned an error.
+	RetryReasonToolError RetryReason = "tool_error"
+	// RetryReasonToolRetryBlocked means tool retry was blocked by tool safety metadata.
+	RetryReasonToolRetryBlocked RetryReason = "tool_retry_blocked"
+)
+
+// RetryOutcome explains what happened after retry was considered.
+type RetryOutcome string
+
+const (
+	// RetryOutcomeConsidered means the runtime is about to ask policy about retry.
+	RetryOutcomeConsidered RetryOutcome = "considered"
+	// RetryOutcomeAttempted means a retry attempt started.
+	RetryOutcomeAttempted RetryOutcome = "attempted"
+	// RetryOutcomeSucceeded means a retry attempt recovered the operation.
+	RetryOutcomeSucceeded RetryOutcome = "succeeded"
+	// RetryOutcomeFailed means a retry attempt failed but more retry may still be considered.
+	RetryOutcomeFailed RetryOutcome = "failed"
+	// RetryOutcomeDisabled means retry was skipped because retry is disabled.
+	RetryOutcomeDisabled RetryOutcome = "disabled"
+	// RetryOutcomeDenied means policy denied retry.
+	RetryOutcomeDenied RetryOutcome = "denied"
+	// RetryOutcomeConstrained means policy allowed retry with narrower constraints.
+	RetryOutcomeConstrained RetryOutcome = "constrained"
+	// RetryOutcomeExhausted means no retry budget remains.
+	RetryOutcomeExhausted RetryOutcome = "exhausted"
+	// RetryOutcomeCanceled means cancellation prevented further retry.
+	RetryOutcomeCanceled RetryOutcome = "canceled"
+	// RetryOutcomeBlocked means runtime semantics block the retry target.
+	RetryOutcomeBlocked RetryOutcome = "blocked"
+)

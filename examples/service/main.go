@@ -41,14 +41,14 @@ func newServer() (*server, error) {
 		return nil, err
 	}
 
-	runner, err := goagent.NewRunner(goagent.Agent{
-		Instructions: "Answer as a concise weather assistant.",
-		Model:        &weatherModel{},
-		Tools:        []goagent.Tool{weather},
-		SessionStore: goagent.NewMemorySessionStore(),
-		Policy:       servicePolicy,
-		EventSinks:   []goagent.EventSink{goagent.EventSinkFunc(logStopEvents)},
-	})
+	runner, err := goagent.New(
+		goagent.WithInstructions("Answer as a concise weather assistant."),
+		goagent.WithModel(&weatherModel{}),
+		goagent.WithTools(weather),
+		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
+		goagent.WithPolicy(servicePolicy),
+		goagent.WithEventSinks(goagent.EventSinkFunc(logStopEvents)),
+	)
 	if err != nil {
 		return nil, err
 	}

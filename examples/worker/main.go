@@ -55,17 +55,17 @@ func newWorker() (*worker, error) {
 		return nil, err
 	}
 
-	runner, err := goagent.NewRunner(goagent.Agent{
-		Instructions: "Process background jobs with concise operational summaries.",
-		Model:        &jobModel{},
-		Tools:        []goagent.Tool{lookup},
-		SessionStore: goagent.NewMemorySessionStore(),
-		EventSinks: []goagent.EventSink{goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {
+	runner, err := goagent.New(
+		goagent.WithInstructions("Process background jobs with concise operational summaries."),
+		goagent.WithModel(&jobModel{}),
+		goagent.WithTools(lookup),
+		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
+		goagent.WithEventSinks(goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {
 			if event.Kind == goagent.EventStop {
 				log.Printf("run_id=%s stop=%s", event.RunID, event.StopReason)
 			}
-		})},
-	})
+		})),
+	)
 	if err != nil {
 		return nil, err
 	}

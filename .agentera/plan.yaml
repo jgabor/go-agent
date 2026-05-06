@@ -1,0 +1,116 @@
+header:
+  level: full
+  created: 2026-05-06
+  status: completed
+  reviewed: 2026-05-06
+  critic_issues: "10 found, 8 addressed, 2 folded into checkpoint"
+  title: "Plan: Runtime Ergonomics And Tooling"
+what: >-
+  Build the next runtime-facing API slice: a low-ceremony constructor facade for
+  resolved runtime dependencies, retry behavior that remains visible and
+  host-governed, and a richer advanced tool authoring path for production-grade
+  tool calling.
+why: >-
+  The current runtime has the core loop, tools, sessions, events, policy,
+  providers, observability, and examples. The next gap is making
+  production-ready runtime behavior easy to start and hard to misread without
+  turning the root package into a product shell.
+constraints: >-
+  Keep auth, settings, prompts, resource loading, UI, package lifecycle, MCP,
+  sub-agent orchestration, and workflow DSLs outside the core. Keep explicit
+  Agent and NewRunner construction public. Keep every retry decision and attempt
+  reconstructable through structured events. Keep simple function tools easy
+  while making the advanced tool path first-class.
+scope:
+  included:
+    - Constructor facade and runtime defaults for resolved host dependencies.
+    - Retry defaults and typed policy decisions for runtime-owned retry behavior.
+    - Advanced ToolDefinition authoring path with runtime-relevant metadata.
+    - Tests and public documentation alignment for completed runtime surfaces.
+  excluded:
+    - Provider registry, environment auth, or provider credential assembly.
+    - Settings, skill, prompt, package, or resource discovery.
+    - TUI, CLI, or product shell behavior.
+    - MCP, sub-agent, or workflow DSL support in the core runtime.
+  deferred:
+    - File-backed session store.
+    - Optional developer CLI.
+    - External adapter packages.
+design: >-
+  Treat the existing Runner, Agent, Policy, Tool, Session, and Event contracts as
+  the semantic core. Add ergonomic public surfaces only where they normalize
+  already-resolved runtime dependencies or expose runtime decisions. Retry
+  belongs to policy-visible runtime behavior, not a hidden lifecycle bus. Rich
+  tool definitions should improve model-visible, policy-visible, and
+  event-visible tool metadata without adding product UI or resource lifecycle
+  concerns.
+tasks:
+  - number: 1
+    name: Define facade defaults and validation contract
+    depends_on: []
+    status: complete
+    acceptance:
+      - GIVEN the runtime offers low-ceremony construction WHEN defaults are documented THEN each default is clearly classified as runtime-owned or outside core scope.
+      - GIVEN a required runtime dependency is missing or invalid WHEN a caller constructs through the facade THEN construction fails before any run starts with a useful error.
+      - GIVEN a caller wants explicit wiring WHEN Agent and NewRunner are used directly THEN that lower-level path remains public and documented as equivalent.
+      - GIVEN new public names are introduced WHEN the API is reviewed THEN they use plain runtime vocabulary and avoid product-shell names.
+  - number: 2
+    name: Add constructor facade behavior
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN a host has a model and optional tools, policy, session storage, or event sinks WHEN it builds a runner through the facade THEN the runner behaves like an explicitly constructed runner with the same resolved dependencies.
+      - GIVEN optional runtime concerns are omitted WHEN a runner is built through the facade THEN documented safe defaults apply without requiring auth, settings, prompt, or resource configuration.
+      - GIVEN invalid facade inputs are supplied WHEN construction is attempted THEN failures are reported before runtime execution.
+      - GIVEN public examples use the low-ceremony path WHEN they are checked THEN they remain honest and runnable.
+  - number: 3
+    name: Define retry policy and event semantics
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN retry is considered by the runtime WHEN policy is asked for a decision THEN the decision includes typed retry context rather than an unstructured lifecycle callback.
+      - GIVEN a retry attempt occurs or is skipped WHEN events are inspected THEN the retry reason, attempt count, target, and outcome can be reconstructed.
+      - GIVEN retry is disabled, denied, constrained, exhausted, or canceled WHEN the run stops THEN the stop reason and events explain why no further retry happened.
+      - GIVEN tool retry could duplicate side effects WHEN semantics are reviewed THEN tool retry is blocked until policy-visible tool safety metadata exists.
+  - number: 4
+    name: Add observable model and runtime retry
+    depends_on: [3]
+    status: complete
+    acceptance:
+      - GIVEN a retryable model or runtime failure occurs WHEN retry is enabled THEN attempts are bounded by runtime defaults or policy constraints.
+      - GIVEN policy allows, denies, or constrains a retry WHEN the runtime proceeds THEN observed behavior matches the policy decision.
+      - GIVEN retry attempts happen WHEN a caller consumes events or run results THEN the caller can reconstruct every attempt without hidden state.
+      - GIVEN retry is disabled or exhausted WHEN a failure remains THEN existing error and stop behavior stays explicit.
+  - number: 5
+    name: Add advanced ToolDefinition metadata path
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN a caller has a simple function tool WHEN it uses the low-friction helper THEN existing simple tool behavior remains available.
+      - GIVEN an advanced tool needs schema, model-visible description metadata, retry safety, or execution constraints WHEN it is defined through ToolDefinition THEN the runtime exposes that metadata consistently to model requests, policy decisions, and events where relevant.
+      - GIVEN tool metadata is not runtime-relevant WHEN a caller attempts to include UI rendering or product-shell concerns THEN those concerns remain outside the root package surface.
+      - GIVEN invalid tool metadata is supplied WHEN the tool is constructed THEN errors identify the invalid tool definition before it is used in a run.
+  - number: 6
+    name: Add policy-governed tool retry
+    depends_on: [3, 5]
+    status: complete
+    acceptance:
+      - GIVEN a tool operation is marked safe for retry WHEN a retryable tool failure occurs THEN policy can approve, deny, or constrain the retry with full tool context.
+      - GIVEN a tool operation could duplicate side effects WHEN retry is considered THEN policy-visible metadata is sufficient to block unsafe retry by default.
+      - GIVEN a tool retry attempt occurs WHEN events are inspected THEN the original call, retry attempt, policy decision, and final outcome are visible.
+      - GIVEN a tool retry is denied or exhausted WHEN the run stops THEN the stop reason and tool result path remain explicit.
+  - number: 7
+    name: Plan-level freshness checkpoint
+    depends_on: [1, 2, 3, 4, 5, 6]
+    status: complete
+    acceptance:
+      - GIVEN the runtime surfaces have changed WHEN the work is complete THEN README Features and Roadmap and TODO agree with repository reality.
+      - GIVEN public API examples are read by a new user WHEN the checkpoint is complete THEN the quick-start path and lower-level explicit path are both honest.
+      - GIVEN the local verification gate runs WHEN the plan is complete THEN mage check succeeds or any failure is documented as a blocker.
+      - GIVEN the plan produced surprises during execution WHEN the checkpoint runs THEN surprises are recorded before handoff or archival.
+overall_acceptance:
+  - GIVEN a host owns resolved dependencies WHEN it adopts go-agent THEN it can choose a low-ceremony facade or explicit Agent/NewRunner construction without different runtime semantics.
+  - GIVEN retry changes runtime behavior WHEN a run is observed THEN retry decisions, attempts, stops, and failures are reconstructable through structured events.
+  - GIVEN serious tools require more than a simple function wrapper WHEN a host uses ToolDefinition THEN runtime-relevant metadata improves model visibility, policy decisions, and debugging without pulling product concerns into core.
+  - GIVEN the plan completes WHEN repository state is reviewed THEN docs, TODO, tests, and roadmap reflect the implemented surfaces.
+surprises: []

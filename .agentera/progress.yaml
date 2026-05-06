@@ -1,4 +1,102 @@
 cycles:
+  - number: 21
+    timestamp: "2026-05-06 22:23"
+    type: docs
+    phase: checkpoint
+    what: Completed the Plan Task 7 freshness checkpoint for runtime ergonomics and tooling.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 7 required README roadmap, TODO, public examples, verification, and surprise recording to agree with the completed runtime surfaces before handoff.
+    discovered: README roadmap and TODO already matched the implemented facade, retry, ToolDefinition, tool retry, examples, and runtime package surfaces. The only freshness gap was that README described the lower-level Agent/NewRunner path as public and equivalent without a concrete code example next to the facade path. No additional checkpoint surprises were found.
+    verified: README now shows both the low-ceremony New path and explicit Agent/NewRunner path; TODO records the checkpoint as done; plan task 7 is complete and plan status is completed; mage check
+    next: Handoff or archive according to the next project direction; no commit or push was made.
+    context:
+      intent: Close the plan only after documentation, backlog, examples, and verification reflect repository reality.
+      constraints: Minimal documentation/artifact edits only; keep README aspirational outside roadmap; do not add implementation scope; do not commit or push.
+      scope: README public construction examples, TODO checkpoint status, plan status, progress log, and local verification.
+  - number: 20
+    timestamp: "2026-05-06 22:23"
+    type: feat
+    phase: build
+    what: Added policy-governed tool retry for Plan Task 6.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 6 required retry-safe tool failures to be policy-governed and reconstructable while unsafe tools remain blocked by default to avoid duplicate side effects.
+    discovered: Tool retry can live inside the existing callTool path and reuse DecisionRetry/EventRetry semantics. The key safety boundary is checking ToolSpec.Safety.Retryable before consulting policy, so the default allow-all policy cannot accidentally repeat unsafe tools. Retry events carry Tool, ToolCall, ToolCallID, RetryTargetTool, reason, attempt, outcome, and terminal StopReason so callers can reconstruct the original call, retry decision, attempt, and final result or stop.
+    verified: TestRunnerRetriesSafeToolFailureWithPolicyContextAndEvents proves retry-safe tool failures reach policy with full tool context, retry once, emit failed/considered/attempted/succeeded retry events, then return the ToolResult path to the model; TestRunnerBlocksUnsafeToolRetryByDefault proves ordinary NewTool behavior remains non-retryable and unsafe failures stop with StopToolError after a blocked retry event and no DecisionRetry; TestRunnerToolRetryPolicyDenialStopsExplicitly proves policy denial stops with StopPolicyDenied and explicit EventError/EventStop; TestRunnerToolRetryPolicyConstraintCanExhaustBeforeRetry proves policy-constrained retry budgets stop with StopRetryExhausted and an exhausted EventRetry carrying the tool call path; gofmt -w api.go runner.go retry_test.go doc.go; go test ./...; mage check
+    next: Begin Task 7 freshness checkpoint if requested.
+    context:
+      intent: Make tool retry real only when safety metadata makes repeated execution policy-visible and explicitly safe.
+      constraints: No provider registry, auth/settings/prompts/resources/UI/product shell/MCP/sub-agent orchestration/workflow DSL behavior; no hidden retry lifecycle; no unsafe tool retry by default; preserve NewTool behavior.
+      scope: Tool retry execution, retry API reason/comment alignment, tests, README/doc/TODO/changelog alignment, plan status, and progress log.
+  - number: 19
+    timestamp: "2026-05-06 22:14"
+    type: feat
+    phase: build
+    what: Added the advanced ToolDefinition metadata path for Task 5.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 5 required a canonical advanced tool authoring path that preserves simple NewTool behavior while exposing runtime-relevant schema, safety, retry, and constraint metadata without adding product-shell concerns.
+    discovered: The smallest correct slice is ToolDefinition plus ToolSafety, ToolConstraints, and ToolMetadata adapted into the existing Tool interface through NewToolFromDefinition; ToolSpec now carries metadata to model requests and policy, and Event.Tool carries it on tool call, policy, result, and error events where relevant. Tool retry execution remains inactive for Task 6 even though retry-safety metadata is now available.
+    verified: TestNewToolAdaptsContextStringFunction and existing NewTool tests prove the low-friction helper still works; TestNewToolFromDefinitionCarriesRuntimeMetadata proves advanced definitions carry explicit schema, description, retry-safety, and execution constraints; TestRunnerExposesAdvancedToolDefinitionMetadata proves metadata reaches model TurnRequest ToolSpec, DecisionToolCall/DecisionToolResult policy context, EventToolCall, EventPolicyDecision, and EventToolResult; TestToolDefinitionSurfaceStaysRuntimeOnly plus README/doc.go prove UI rendering, product shell, marketplace, prompt/resource loading, auth/settings, MCP, sub-agent orchestration, and workflow DSL concerns remain outside the root tool surface; TestNewToolFromDefinitionRejectsInvalidMetadata proves invalid names, empty descriptions, nil schemas, negative constraints, and invalid functions fail at construction before a run; TestToolDefinitionEnforcesOutputConstraint proves runtime-relevant execution constraints are active without implementing tool retry; README documents that ToolDefinition exposes retry-safety metadata while Task 6 still owns policy-governed tool retry execution; gofmt -w api.go tool.go runner.go api_test.go tool_test.go runner_test.go doc.go; go test ./...; mage check
+    next: Begin Task 6 policy-governed tool retry only after this Task 5 handoff.
+    context:
+      intent: Make production-grade tool metadata first-class while preserving the small Tool interface and simple function helper.
+      constraints: No policy-governed tool retry execution, UI renderers, product shell, marketplace/package lifecycle, prompt/resource loading, auth/settings, MCP, sub-agent orchestration, or workflow DSL concepts.
+      scope: ToolDefinition API, metadata validation, ToolSpec/Event propagation, runtime constraint enforcement, tests, README/doc/TODO/changelog alignment, plan status, and progress log.
+  - number: 18
+    timestamp: "2026-05-06 22:08"
+    type: feat
+    phase: build
+    what: Implemented observable model and runtime-owned retry for Task 4.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 4 required retry execution to remain bounded, policy-visible, and reconstructable through structured events without implementing tool retry.
+    discovered: The smallest correct runtime slice is opt-in RetryPolicy on Agent/New facade, model turn retry, and session-load runtime retry. Tool errors still stop immediately, preserving the Task 5/6 safety-metadata block.
+    verified: TestRunnerRetriesModelErrorWithObservablePolicyAndAttempts proves retryable model failures are bounded by RetryPolicy MaxAttempts, policy receives DecisionRetry with typed context, and EventRetry/EventPolicyDecision let callers reconstruct failed, considered, attempted, and succeeded attempts; TestRunnerRetryPolicyDenialStopsExplicitly proves policy denial prevents another model call and stops with StopPolicyDenied plus explicit EventError/EventStop; TestRunnerRetryPolicyConstraintBoundsAttempts proves policy-constrained MaxAttempts narrows the budget and stops with StopRetryExhausted when no retry remains; TestRunnerRuntimeRetryCoversSessionLoad proves runtime-owned session-load failure retry uses RetryTargetRuntime, policy events, bounded attempts, and reconstructable retry outcomes; existing TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation and TestRuntimeBehaviorSpecification continue to prove default retry-disabled model/tool error behavior remains explicit; TestToolRetryIsBlockedUntilSafetyMetadataExists proves tool retry remains blocked; TestNewValidatesBeforeRun covers WithRetry validation; gofmt -w api.go facade.go facade_test.go runner.go retry_test.go runtime_behavior_test.go doc.go; go test ./...; mage check
+    next: Begin Task 5 advanced ToolDefinition metadata path only after this Task 4 handoff.
+    context:
+      intent: Make retry execution real without hidden lifecycle state or unsafe tool repetition.
+      constraints: No tool retry, auth/settings/prompts/resource loading, UI, package lifecycle, MCP, sub-agent orchestration, workflow DSL, or product-shell behavior.
+      scope: Agent retry config, facade WithRetry option, model retry, session-load runtime retry, policy/retry events, tests, README/doc/TODO/changelog alignment, plan status, and progress log.
+  - number: 17
+    timestamp: "2026-05-06 22:04"
+    type: feat
+    phase: build
+    what: Defined typed retry policy and event semantics without implementing broad retry execution.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 3 required retry to be policy-visible and reconstructable through structured events while blocking unsafe tool retry until safety metadata exists.
+    discovered: The smallest correct slice is an API semantics contract: DecisionRetry with RetryContext, PolicyDecision retry constraints, EventRetry with RetryEvent, typed retry targets/reasons/outcomes, and StopRetryExhausted. Runtime execution remains Task 4, and tool retry remains blocked until ToolDefinition safety metadata exists in later tasks.
+    verified: TestRetryPolicyDecisionCarriesTypedContext proves policy receives DecisionRetry with typed target, reason, attempt, max attempts, request/session-compatible context, and triggering error rather than an unstructured callback; TestRetryEventsReconstructAttemptAndTerminalOutcomes proves retry reason, attempt count, target, max attempts, outcome, and terminal stop reason can be reconstructed from EventRetry and EventStop; TestRetryStopOutcomesAreTyped proves disabled, denied, constrained, exhausted, and canceled retry outcomes are typed with terminal stop reasons; TestToolRetryIsBlockedUntilSafetyMetadataExists plus README/doc.go text prove tool retry is blocked until policy-visible tool safety metadata exists; README roadmap now marks Retries Started with typed retry policy and event semantics; gofmt -w api.go doc.go retry_test.go runtime_behavior_test.go; go test ./...; mage check
+    next: Add observable model and runtime retry in Task 4 without changing the Task 3 tool retry safety block.
+    context:
+      intent: Make retry semantics explicit before adding retry execution.
+      constraints: No auth/settings/prompts/resource loading, UI, package lifecycle, MCP, sub-agent orchestration, workflow DSL, broad runtime retry execution, or unsafe tool retry.
+      scope: Public retry API types, retry semantics tests, README/doc/TODO/changelog alignment, plan status, and progress log.
+  - number: 16
+    timestamp: "2026-05-06 21:55"
+    type: feat
+    phase: build
+    what: Added constructor facade behavior coverage and moved runnable examples onto the low-ceremony New path.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 2 required the facade to behave like explicit Agent/NewRunner construction while keeping defaults safe and examples honest.
+    discovered: The implementation can remain a thin options-to-Agent path over NewRunner; the missing work was stronger equivalence/default validation and example adoption, not a second construction core.
+    verified: facade_test.go covers New equivalence with tools, policy, session storage, and event sinks; safe omitted defaults with only a model; and invalid nil option/model/policy/session store/tool/event sink inputs failing at construction; examples/minimal, examples/worker, and examples/cli run locally through New without network/API keys; README public facade snippets reviewed and fixed to use the implemented API: New returning Runner/error, providers/openai.ChatModel, NewTool with WithTools, RunRequest for Run/Stream/session use, Event.ToolCall.Name for tool-call events, and PolicyFunc returning PolicyDecision/error with Decision.ToolCall.Name; go test ./...; go run ./examples/minimal; go run ./examples/worker; go run ./examples/cli -input "Weather in Berlin?"; go run ./examples/cli -input "Weather in Tokyo?" -stream; mage check
+    next: Start retry semantics only in a separate Task 3 cycle.
+    context:
+      intent: Make the facade behavior real for resolved host dependencies without adding product assembly.
+      constraints: No provider registry, auth/settings/prompt/resource loading, product shell, MCP, sub-agent orchestration, workflow DSL, retry semantics, or ToolDefinition work.
+      scope: Facade behavior tests, runnable example construction paths, roadmap/TODO/changelog/doc alignment, plan status, and progress log.
+  - number: 15
+    timestamp: "2026-05-06 21:50"
+    type: feat
+    phase: build
+    what: Defined the facade construction contract with runtime-owned defaults, host-owned exclusions, validation, and explicit NewRunner equivalence.
+    commit: "Uncommitted per task constraint"
+    inspiration: Plan Task 1 required a low-ceremony facade contract without moving product assembly into the core runtime.
+    discovered: The facade can stay a thin options-to-Agent wrapper and reuse NewRunner validation, preserving the lower-level path as the semantic source of truth.
+    verified: doc.go and README Runtime Model classify facade defaults as runtime-owned and provider/auth/settings/UI/CLI/MCP/orchestration/DSL concerns as host-owned or outside core; facade_test.go validates missing model/nil option/nil model/nil policy fail at New before Run and New matches Agent+NewRunner behavior; public names reviewed as plain runtime vocabulary only (New, Option, WithModel, WithInstructions, WithTools, WithPolicy, WithSessionStore, WithEventSinks); gofmt -w facade.go facade_test.go doc.go && go test ./...; mage check
+    next: Implement constructor facade behavior in Task 2 after this contract slice.
+    context:
+      intent: Define and test the construction boundary before adding broader facade examples or behavior.
+      constraints: Keep provider registries, auth assembly, settings/prompt/resource loading, UI, CLI shell, MCP, sub-agent orchestration, and workflow DSLs outside core.
+      scope: New facade contract, option validation, construction equivalence tests, package/README docs, plan status, and progress log.
   - number: 14
     timestamp: "2026-05-06 19:07"
     type: docs

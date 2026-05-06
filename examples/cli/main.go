@@ -81,12 +81,12 @@ func newRunner() (goagent.Runner, error) {
 		return nil, err
 	}
 
-	return goagent.NewRunner(goagent.Agent{
-		Instructions: "Answer as a concise command-line weather assistant.",
-		Model:        &cliModel{},
-		Tools:        []goagent.Tool{weather},
-		SessionStore: goagent.NewMemorySessionStore(),
-	})
+	return goagent.New(
+		goagent.WithInstructions("Answer as a concise command-line weather assistant."),
+		goagent.WithModel(&cliModel{}),
+		goagent.WithTools(weather),
+		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
+	)
 }
 
 type cliModel struct{}

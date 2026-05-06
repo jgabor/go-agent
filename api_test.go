@@ -3,6 +3,8 @@ package goagent_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	goagent "github.com/jgabor/go-agent"
@@ -65,6 +67,18 @@ func TestPolicyFuncAdaptsHostDecisionLogic(t *testing.T) {
 	}
 	if !decision.Allowed {
 		t.Fatal("PolicyFunc denied the expected tool call")
+	}
+}
+
+func TestToolDefinitionSurfaceStaysRuntimeOnly(t *testing.T) {
+	typ := reflect.TypeOf(goagent.ToolDefinition{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := strings.ToLower(typ.Field(i).Name)
+		for _, forbidden := range []string{"ui", "render", "view", "market", "package", "auth", "setting", "mcp", "prompt", "resource", "workflow", "agent"} {
+			if strings.Contains(field, forbidden) {
+				t.Fatalf("ToolDefinition field %q leaks non-runtime concern %q", typ.Field(i).Name, forbidden)
+			}
+		}
 	}
 }
 

@@ -158,7 +158,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 	}
 }
 
-func TestRetryBehaviorIsDeferredInRoadmap(t *testing.T) {
+func TestRetrySemanticsAreStartedInRoadmap(t *testing.T) {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatal(err)
@@ -168,11 +168,11 @@ func TestRetryBehaviorIsDeferredInRoadmap(t *testing.T) {
 	for _, want := range []string{
 		"| Retries",
 		"Runtime retry policy and retry events",
-		"Deferred",
-		"Retry semantics deferred by behavior tests",
+		"Started",
+		"Observable model/runtime/tool retry exists",
 	} {
 		if !strings.Contains(contents, want) {
-			t.Fatalf("README roadmap does not explicitly defer retry behavior; missing %q", want)
+			t.Fatalf("README roadmap does not describe started retry semantics; missing %q", want)
 		}
 	}
 }

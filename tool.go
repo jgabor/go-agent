@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 // Supported function shapes are func(context.Context, string) (string, error)
 // and func(context.Context, T) (string, error), where T is a struct input.
 func NewTool(name, description string, fn any) (Tool, error) {
-	return newTool(name, description, nil, fn)
+	return newTool(name, description, nil, ToolSafety{}, ToolConstraints{}, fn)
 }
 
 // NewToolWithSchema adapts a supported Go function into a Tool with explicit
@@ -28,10 +29,18 @@ func NewToolWithSchema(name, description string, schema ToolSchema, fn any) (Too
 	if schema == nil {
 		return nil, fmt.Errorf("goagent: tool %q explicit schema cannot be nil", name)
 	}
-	return newTool(name, description, schema, fn)
+	return newTool(name, description, schema, ToolSafety{}, ToolConstraints{}, fn)
 }
 
-func newTool(name, description string, explicitSchema ToolSchema, fn any) (Tool, error) {
+// NewToolFromDefinition adapts an advanced ToolDefinition into a runtime Tool.
+func NewToolFromDefinition(definition ToolDefinition) (Tool, error) {
+	if err := validateToolDefinition(definition); err != nil {
+		return nil, err
+	}
+	return newTool(definition.Name, definition.Description, definition.Schema, definition.Safety, definition.Constraints, definition.Function)
+}
+
+func newTool(name, description string, explicitSchema ToolSchema, safety ToolSafety, constraints ToolConstraints, fn any) (Tool, error) {
 	if err := validateToolName(name); err != nil {
 		return nil, err
 	}
@@ -49,7 +58,7 @@ func newTool(name, description string, explicitSchema ToolSchema, fn any) (Tool,
 		}
 	}
 
-	return functionTool{name: name, description: description, fn: toolFn.fn, inputType: toolFn.inputType, schema: cloneToolSchema(schema)}, nil
+	return functionTool{name: name, description: description, fn: toolFn.fn, inputType: toolFn.inputType, schema: cloneToolSchema(schema), safety: safety, constraints: constraints}, nil
 }
 
 type functionTool struct {
@@ -58,6 +67,8 @@ type functionTool struct {
 	fn          reflect.Value
 	inputType   reflect.Type
 	schema      ToolSchema
+	safety      ToolSafety
+	constraints ToolConstraints
 }
 
 func (t functionTool) Name() string { return t.name }
@@ -68,9 +79,18 @@ func (t functionTool) Schema() ToolSchema {
 	return cloneToolSchema(t.schema)
 }
 
+func (t functionTool) Metadata() ToolMetadata {
+	return ToolMetadata{Safety: t.safety, Constraints: t.constraints}
+}
+
 func (t functionTool) Call(ctx context.Context, call ToolCall) (ToolResult, error) {
 	if call.Name != t.name {
 		return ToolResult{}, fmt.Errorf("goagent: tool %q cannot execute call for %q", t.name, call.Name)
+	}
+	if t.constraints.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, t.constraints.Timeout)
+		defer cancel()
 	}
 
 	input, err := decodeToolInput(t.name, t.inputType, call.Input)
@@ -84,8 +104,34 @@ func (t functionTool) Call(ctx context.Context, call ToolCall) (ToolResult, erro
 		return ToolResult{}, fmt.Errorf("goagent: tool %q failed: %w", t.name, err)
 	}
 	content := outputs[0].String()
+	if t.constraints.MaxOutputBytes > 0 && len(content) > t.constraints.MaxOutputBytes {
+		return ToolResult{}, fmt.Errorf("goagent: tool %q output exceeds max output bytes %d", t.name, t.constraints.MaxOutputBytes)
+	}
 
 	return ToolResult{CallID: call.ID, Name: call.Name, Content: content}, nil
+}
+
+type toolMetadataProvider interface {
+	Metadata() ToolMetadata
+}
+
+func validateToolDefinition(definition ToolDefinition) error {
+	if err := validateToolName(definition.Name); err != nil {
+		return fmt.Errorf("goagent: invalid tool definition: %w", err)
+	}
+	if strings.TrimSpace(definition.Description) == "" {
+		return fmt.Errorf("goagent: invalid tool definition %q: description cannot be empty", definition.Name)
+	}
+	if definition.Schema == nil {
+		return fmt.Errorf("goagent: invalid tool definition %q: schema cannot be nil", definition.Name)
+	}
+	if definition.Constraints.Timeout < 0*time.Second {
+		return fmt.Errorf("goagent: invalid tool definition %q: timeout cannot be negative", definition.Name)
+	}
+	if definition.Constraints.MaxOutputBytes < 0 {
+		return fmt.Errorf("goagent: invalid tool definition %q: max output bytes cannot be negative", definition.Name)
+	}
+	return nil
 }
 
 type toolFunc struct {

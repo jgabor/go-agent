@@ -25,22 +25,16 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add a service example.
 - [x] Add a worker example.
 - [x] Add a CLI example.
+- [x] Add a factory-first constructor facade for runtime defaults.
+- [x] Design runtime retry defaults through typed policy decisions.
+- [x] Implement observable model and runtime retry.
+- [x] Add a rich `ToolDefinition` path for advanced tools.
+- [x] Add policy-governed tool retry for retry-safe tools.
+- [x] Complete runtime ergonomics plan freshness checkpoint.
 
 ## Now
 
 ## Next
-
-- [ ] Add a factory-first constructor facade for runtime defaults.
-  - Trigger: the current API exposes `NewRunner(Agent)` while the README and product promise call for a lower-ceremony one-import path.
-  - Constraint: the facade must build resolved runtime configuration only; auth, settings, skills, prompts, and resource loading remain host-owned.
-
-- [ ] Design runtime retry defaults through typed policy decisions.
-  - Trigger: retry remains deferred, and tool retry safety requires host-owned decisions rather than a mutable lifecycle bus.
-  - Constraint: every retry decision and attempt must be reconstructable through structured events.
-
-- [ ] Add a rich `ToolDefinition` path for advanced tools.
-  - Trigger: top-notch tool calling needs first-class runtime metadata such as retry behavior, execution constraints, and prompt hints.
-  - Constraint: keep the base `Tool` contract small and keep UI rendering or product-shell behavior outside the core.
 
 ## Examples
 

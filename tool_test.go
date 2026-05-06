@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	goagent "github.com/jgabor/go-agent"
 )
@@ -135,6 +136,107 @@ func TestNewToolWithSchemaUsesExplicitSchema(t *testing.T) {
 		return "ok", nil
 	}); err == nil {
 		t.Fatal("NewToolWithSchema succeeded with nil schema")
+	}
+}
+
+func TestNewToolFromDefinitionCarriesRuntimeMetadata(t *testing.T) {
+	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather with explicit advanced metadata.",
+		Schema: goagent.ToolSchema{
+			"type": "object",
+			"properties": map[string]any{
+				"city": map[string]any{"type": "string", "description": "City name."},
+			},
+			"required": []string{"city"},
+		},
+		Function: func(context.Context, string) (string, error) {
+			return "clear", nil
+		},
+		Safety: goagent.ToolSafety{ReadOnly: true, Retryable: true},
+		Constraints: goagent.ToolConstraints{
+			Timeout:        time.Second,
+			MaxOutputBytes: 32,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	metadata, ok := tool.(interface{ Metadata() goagent.ToolMetadata })
+	if !ok {
+		t.Fatal("advanced tool does not expose runtime metadata")
+	}
+	got := metadata.Metadata()
+	if !got.Safety.ReadOnly || !got.Safety.Retryable || got.Constraints.Timeout != time.Second || got.Constraints.MaxOutputBytes != 32 {
+		t.Fatalf("Metadata = %+v", got)
+	}
+	if tool.Schema()["type"] != "object" || tool.Description() == "" {
+		t.Fatalf("advanced tool model metadata missing: description=%q schema=%+v", tool.Description(), tool.Schema())
+	}
+}
+
+func TestNewToolFromDefinitionRejectsInvalidMetadata(t *testing.T) {
+	valid := goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (string, error) {
+			return "ok", nil
+		},
+	}
+
+	tests := []struct {
+		name       string
+		mutate     func(*goagent.ToolDefinition)
+		wantErr    string
+		wantPrefix string
+	}{
+		{name: "bad name", mutate: func(def *goagent.ToolDefinition) { def.Name = "bad.name" }, wantErr: "invalid character", wantPrefix: "invalid tool definition"},
+		{name: "empty description", mutate: func(def *goagent.ToolDefinition) { def.Description = " " }, wantErr: "description cannot be empty", wantPrefix: "invalid tool definition"},
+		{name: "nil schema", mutate: func(def *goagent.ToolDefinition) { def.Schema = nil }, wantErr: "schema cannot be nil", wantPrefix: "invalid tool definition"},
+		{name: "negative timeout", mutate: func(def *goagent.ToolDefinition) { def.Constraints.Timeout = -time.Second }, wantErr: "timeout cannot be negative", wantPrefix: "invalid tool definition"},
+		{name: "negative output", mutate: func(def *goagent.ToolDefinition) { def.Constraints.MaxOutputBytes = -1 }, wantErr: "max output bytes cannot be negative", wantPrefix: "invalid tool definition"},
+		{name: "bad function", mutate: func(def *goagent.ToolDefinition) {
+			def.Function = func(context.Context) (string, error) { return "", nil }
+		}, wantErr: "func(context.Context, string|struct) (string, error)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			definition := valid
+			tt.mutate(&definition)
+			_, err := goagent.NewToolFromDefinition(definition)
+			if err == nil {
+				t.Fatal("NewToolFromDefinition succeeded with invalid metadata")
+			}
+			if tt.wantPrefix != "" && !strings.Contains(err.Error(), tt.wantPrefix) {
+				t.Fatalf("error = %q, want prefix %q", err, tt.wantPrefix)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestToolDefinitionEnforcesOutputConstraint(t *testing.T) {
+	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get weather.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (string, error) {
+			return "too long", nil
+		},
+		Constraints: goagent.ToolConstraints{MaxOutputBytes: 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = tool.Call(context.Background(), goagent.ToolCall{Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)})
+	if err == nil || !strings.Contains(err.Error(), "max output bytes") {
+		t.Fatalf("Call error = %v, want max output bytes error", err)
 	}
 }
 

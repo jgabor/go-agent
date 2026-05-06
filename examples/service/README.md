@@ -14,6 +14,6 @@ curl -sS localhost:8080/ask \
   -d '{"input":"Should I bring a jacket in Berlin?","session_id":"demo"}'
 ```
 
-The service uses `NewRunner`, `NewTool`, `SessionStore`, `Policy`, and
-`EventSink` from the library. It keeps the model local so the example is
+The service uses `New`, `NewTool`, `SessionStore`, `Policy`, and `EventSink`
+from the library. It keeps the model local so the example is
 runnable without network access or API keys.

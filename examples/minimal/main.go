@@ -19,16 +19,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	runner, err := goagent.NewRunner(goagent.Agent{
-		Instructions: "Give practical weather advice.",
-		Model:        &weatherModel{},
-		Tools:        []goagent.Tool{weather},
-		EventSinks: []goagent.EventSink{goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {
+	runner, err := goagent.New(
+		goagent.WithInstructions("Give practical weather advice."),
+		goagent.WithModel(&weatherModel{}),
+		goagent.WithTools(weather),
+		goagent.WithEventSinks(goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {
 			if event.Kind == goagent.EventStop {
 				log.Printf("run stopped: %s", event.StopReason)
 			}
-		})},
-	})
+		})),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

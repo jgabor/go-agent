@@ -54,4 +54,62 @@ decisions:
       its extension/resource shell belongs outside go-agent's root runtime.
     confidence: provisional
     feeds_into: [VISION.md, TODO.md]
+  - number: 2
+    date: 2026-05-07
+    question: Which Lira integration gaps should go-agent address on its side?
+    context: >-
+      Lira's provider replacement gap analysis correctly found that go-agent is
+      not ready to replace Lira's provider layer, but its priorities were framed
+      around replacement. During adversarial deliberation, the integration target
+      was narrowed to shared seams first: Lira keeps provider registry, auth,
+      CLI subprocesses, workflow policy, workdir behavior, and pricing, while
+      go-agent strengthens only generic runtime/provider contracts.
+    alternatives:
+      - name: '[Adapter-only compatibility]'
+        status: rejected
+        tradeoffs: >-
+          Would minimize go-agent API churn by forcing Lira adapters to buffer,
+          stringify, and side-channel missing data, but would leave the runtime
+          event stream unable to represent real provider behavior.
+        win_condition: >-
+          Choose this only if go-agent deliberately remains turn-only and treats
+          provider token streaming as entirely host-owned.
+      - name: '[Patch narrow gaps incrementally]'
+        status: rejected
+        tradeoffs: >-
+          Adding turn options, usage, JSON tool results, and provider streaming
+          one by one looks safer, but risks a mismatched public API where events,
+          messages, and model results use different vocabularies.
+        win_condition: >-
+          Choose this if public API stability matters more than a coherent
+          streaming/transcript model while the project is still young.
+      - name: '[Break early for streaming-primary shared seams]'
+        status: chosen
+        tradeoffs: >-
+          Requires redesigning public model, event, message, and result shapes,
+          but gives go-agent one canonical stream for provider deltas, tool
+          progress, terminal errors, usage metadata, and final transcript
+          assembly. This keeps Lira product policy outside core while addressing
+          the reusable runtime gap directly.
+        win_condition: >-
+          Users can consume Event as the authoritative run stream, reconstruct
+          block-based messages from it, and still get ergonomic final results for
+          non-streaming callers.
+    choice: >-
+      Break early toward a streaming-primary model contract: Event is the
+      canonical streaming boundary; Message becomes block-based for text, tool
+      calls, and tool results; completion results are assembled from streaming;
+      turn options, usage metadata, and JSON-capable tool results become generic
+      runtime/provider seams; accepted stream failures return Go errors and also
+      emit terminal error/stop events.
+    reasoning: >-
+      Pi's coding-agent architecture treats provider streaming as the primitive
+      and derives completion from the stream. That makes streaming an event and
+      transcript design problem, not just an adapter feature. The deciding
+      variable was whether Lira partial adoption should merely avoid loss or
+      push go-agent toward a reusable production streaming contract. Because the
+      project is young, a coherent breaking redesign is preferable to layering
+      compatibility patches that become permanent.
+    confidence: provisional
+    feeds_into: [TODO.md]
 archive: []

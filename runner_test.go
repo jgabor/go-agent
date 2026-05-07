@@ -306,13 +306,7 @@ func TestRunnerExecutesToolAndFeedsResultBackToModel(t *testing.T) {
 	if got := secondMessages[len(secondMessages)-1]; got.Role != goagent.RoleTool || got.ToolCallID != "call-1" || got.Content != "clear in Austin" {
 		t.Fatalf("tool result was not fed back to model: %+v", got)
 	}
-	assertEventKinds(t, result.Events, []goagent.EventKind{
-		goagent.EventToolCall,
-		goagent.EventPolicyDecision,
-		goagent.EventToolResult,
-		goagent.EventTextDelta,
-		goagent.EventStop,
-	})
+	assertEventKinds(t, result.Events, toolThenTextEvents())
 	assertOrderedCorrelatedEvents(t, result.Events)
 }
 
@@ -323,12 +317,14 @@ func TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation(t *testing.T) {
 		request  goagent.RunRequest
 		agent    goagent.Agent
 		wantStop goagent.StopReason
+		wantErr  bool
 	}{
 		{
 			name:     "model error",
 			ctx:      context.Background(),
 			agent:    goagent.Agent{Model: &recordingModel{err: errors.New("model failed")}},
 			wantStop: goagent.StopModelError,
+			wantErr:  true,
 		},
 		{
 			name: "unknown tool",
@@ -385,7 +381,7 @@ func TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := runner.Run(tt.ctx, tt.request)
-			if err != nil {
+			if (err != nil) != tt.wantErr {
 				t.Fatal(err)
 			}
 			if result.StopReason != tt.wantStop {
@@ -519,7 +515,7 @@ func TestRunnerStreamEmitsRunEvents(t *testing.T) {
 	for event := range events {
 		kinds = append(kinds, event.Kind)
 	}
-	if !slices.Equal(kinds, []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop}) {
+	if !slices.Equal(kinds, textTurnEvents()) {
 		t.Fatalf("stream event kinds = %v", kinds)
 	}
 }
@@ -582,6 +578,15 @@ func (m *recordingModel) Turn(_ context.Context, request goagent.TurnRequest) (g
 	return turn, nil
 }
 
+func (m *recordingModel) Stream(ctx context.Context, request goagent.TurnRequest, emit func(goagent.Event)) error {
+	turn, err := m.Turn(ctx, request)
+	if err != nil {
+		return err
+	}
+	goagent.StreamTurnResult(turn, emit)
+	return nil
+}
+
 type namedTool struct {
 	name string
 	err  error
@@ -641,4 +646,13 @@ func (m *schemaMutatingModel) Turn(_ context.Context, request goagent.TurnReques
 	city := properties["city"].(map[string]any)
 	city["type"] = "number"
 	return goagent.TurnResult{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}}, nil
+}
+
+func (m *schemaMutatingModel) Stream(ctx context.Context, request goagent.TurnRequest, emit func(goagent.Event)) error {
+	turn, err := m.Turn(ctx, request)
+	if err != nil {
+		return err
+	}
+	goagent.StreamTurnResult(turn, emit)
+	return nil
 }

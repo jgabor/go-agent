@@ -1,0 +1,178 @@
+header:
+  level: full
+  created: 2026-05-07
+  status: completed
+  reviewed: 2026-05-07
+  critic_issues: "9 found, 9 addressed, 0 dismissed"
+  revised: >-
+    Split the test migration and tool work into smaller cycles, removed the
+    dependency bottleneck, made compatibility baselines explicit, named retry
+    target categories, and clarified event sink behavior as an existing
+    observational contract.
+  completed: 2026-05-07
+  title: "Plan: Runtime Depth And Test Locality"
+what: >-
+  Deepen the highest-impact shallow runtime modules from the architecture
+  review: the test surface around the real Runner, policy-visible retry,
+  runtime history and event construction, and tool authoring/execution. Public
+  runtime behavior should remain compatible while repeated rules gain better
+  locality behind existing seams.
+why: >-
+  go-agent now has the core product shape: Agent, Runner, Tool, Session, Event,
+  Policy, providers, retries, sessions, observability, and examples. Recent
+  slices concentrated behavior in Runner and left duplicate retry, event, and
+  test-runtime rules. This plan improves locality for correctness bugs,
+  preserves leverage from existing public seams, and makes the codebase easier
+  for humans and AI agents to navigate before new runtime surfaces are added.
+constraints: >-
+  Preserve the library-first core and existing public Agent, Runner, Tool,
+  Session, Event, and Policy vocabulary. Do not add product assembly, provider
+  registries, auth/settings/prompt/resource loading, UI, CLI shell behavior,
+  MCP, sub-agent orchestration, or workflow DSL features. Keep retry
+  policy-visible and reconstructable through structured events. Retry targets in
+  scope are model turn failures, session-store load failures, and retry-safe tool
+  execution failures. Unknown tools, policy denial, cancellation, step limits,
+  and event sink failures remain terminal or observational rather than retry
+  targets. Keep ToolDefinition runtime-focused and avoid provider-specific
+  changes.
+scope:
+  included:
+    - Baseline characterization for current public runtime behavior.
+    - Real Runner scenario tests that replace the test-only scripted runtime.
+    - Retry behavior depth for model, session-store load, and retry-safe tool failures.
+    - Runtime history depth for event ordering, correlation, sink observation, failure, stop, and result snapshots.
+    - Tool authoring, metadata propagation, execution constraints, and retry-safety locality.
+    - Documentation/backlog freshness where public behavior or repository guidance changes.
+  excluded:
+    - Public API redesign for Agent, Runner, Tool, Session, Event, or Policy.
+    - New provider adapters or provider marketplace behavior.
+    - Session store architecture beyond compatibility with current session-store load retry.
+    - Product shell concerns including auth assembly, settings, prompts, resources, UI, CLI lifecycle, MCP, sub-agent orchestration, or workflow DSLs.
+  deferred:
+    - OpenAI provider adapter internal deepening.
+    - Session lifecycle deepening.
+    - File-backed or database-backed session adapters.
+design: >-
+  Characterize current public behavior first, then move repeated runtime rules
+  toward a single maintainable locality while keeping existing seams stable.
+  Tests should use real adapters at real seams: Model, Tool, Policy,
+  SessionStore, EventSink, Runner, Run, and Stream. When existing behavior is
+  contradictory across surfaces, pause to record the surprise and choose the
+  public contract before changing behavior.
+tasks:
+  - number: 1
+    name: Characterize runtime compatibility baseline
+    depends_on: []
+    status: complete
+    acceptance:
+      - GIVEN existing public behavior is reviewed WHEN baseline tests are selected THEN Run, Stream, retry, tools, policy, sessions, and event sinks each have regression coverage or an explicit documented gap.
+      - GIVEN current retry behavior is characterized WHEN targets are listed THEN model turn, session-store load, retry-safe tool execution, unsafe tool block, policy denial, cancellation, and step-limit behavior are each classified.
+      - GIVEN event behavior is characterized WHEN sinks are reviewed THEN event sinks are documented or tested as observational adapters that do not control runtime progress.
+      - GIVEN a current behavior appears inconsistent WHEN the baseline is recorded THEN the inconsistency is logged as a surprise before any behavior change.
+    baseline:
+      coverage:
+        run: TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation and TestRuntimeBaselineClassifiesTerminalNonRetryBehavior cover real Runner stop behavior.
+        stream: TestStreamNormalCompletion, TestStreamStopsOnError, TestStreamEventSequenceIsMonotonic, and TestStreamAndRunProduceSameEventKinds cover Stream behavior and Run/Stream event parity.
+        retry: TestRuntimeBaselineClassifiesRetryTargets, TestRuntimeBaselineClassifiesTerminalNonRetryBehavior, TestRuntimeBaselineSessionLoadRetryExhaustionReturnsErrorAndEvents, and retry_test.go cover retry targets, outcomes, policy visibility, and terminal non-targets.
+        tools: TestRunnerExecutesToolAndFeedsResultBackToModel, TestRunnerExposesAdvancedToolDefinitionMetadata, tool_test.go, and retry-safe/unsafe tool retry tests cover tool construction, metadata, execution, and retry safety.
+        policy: TestRunnerPolicyCanConstrainToolCallInput, TestRunnerPolicyCanConstrainStepLimit, TestRunnerPolicyCanValidateToolResult, retry policy tests, and terminal policy-denial baseline cover policy hooks.
+        sessions: session_test.go and session-store runtime retry tests cover session load, save, resume, copies, store errors, and load retry.
+        event_sinks: observability_test.go covers nil sink rejection, Run and Stream observation, context propagation, and panic isolation.
+      retry_classification:
+        model_turn: retry target; retry emits RetryTargetModel and can succeed, be denied, be constrained, be canceled, or exhaust.
+        session_store_load: retry target; retry emits RetryTargetRuntime; if exhausted, Run currently returns both a StopRetryExhausted result snapshot and the store error.
+        retry_safe_tool_execution: retry target only when ToolSpec.Safety.Retryable is true; retry emits RetryTargetTool and policy-visible tool context.
+        unsafe_tool_block: terminal/non-retried execution; emits failed then blocked retry events with RetryReasonToolRetryBlocked and StopToolError, without DecisionRetry.
+        policy_denial: terminal/non-retry target; retry-enabled tool-call policy denial stops with StopPolicyDenied and no retry events.
+        cancellation: terminal/non-retry target before model work in the baseline cancellation case; no retry events.
+        step_limit: terminal/non-retry target; retry-enabled step limit stops with StopStepLimit and no retry events.
+      event_sink_contract: Event sinks are observational adapters. They receive the same event order as Run/Stream collection, cannot return control decisions, and panics are recovered so runtime progress and results continue.
+      artifact_provenance: .agentera/archive/plan-2026-05-06-runtime-ergonomics-and-tooling.yaml pre-existed Task 1 from the immediately preceding planera step, was not created or modified by the Task 1 implementation, and remains intentionally untracked.
+      documented_gaps: No explicit gap remains for Task 1 acceptance; deeper locality and replacement of the scripted runtime are intentionally left to Tasks 2-7.
+  - number: 2
+    name: Replace scripted runtime with real Runner scenarios
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN runtime behavior scenarios exist WHEN tests execute THEN they exercise the real Runner interface rather than a parallel runtime implementation.
+      - GIVEN event ordering and correlation are asserted WHEN Run or Stream completes THEN the assertions apply to events produced by production runtime behavior.
+      - GIVEN model, tool, policy, cancellation, and step-limit scenarios are covered WHEN the tests pass THEN no simplified test-only agent loop remains as a source of false confidence.
+      - GIVEN test helpers remain WHEN the suite is reviewed THEN they are adapters at real seams, not duplicate runtime implementations.
+    completion:
+      evidence: runtime_behavior_test.go now constructs production Runner instances with real Agent, Model, Tool, Policy, Run, and Stream seams for normal completion, tool dispatch, tool error, model error, cancellation, real run-start policy denial, and step-limit scenarios.
+      removed: The test-only scriptedRuntime, scriptedModel, scriptedTool, scriptedTurn, and duplicate helper functions for model turns, tool execution, policy dispatch, step limits, stop handling, and event sequencing were removed.
+      verification: Focused runtime behavior tests passed with go test ./... -run 'TestRuntimeBehaviorSpecification|TestRuntimeBehaviorStreamUsesRunnerEvents'. Full gate recorded in progress for the implementation cycle.
+  - number: 3
+    name: Deepen policy-visible retry behavior
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN retry is enabled for model turn, session-store load, or retry-safe tool execution failures WHEN a failure occurs THEN policy-visible retry decisions and events match the baseline.
+      - GIVEN retry is denied, constrained, exhausted, blocked, canceled, or succeeds WHEN events are inspected THEN attempts, targets, outcomes, delays, and stop reasons remain reconstructable.
+      - GIVEN an unknown tool, policy denial, cancellation, step limit, or event sink failure occurs WHEN retry is enabled THEN it is not retried unless a later plan changes the public contract.
+      - GIVEN retry behavior is tested WHEN a retry rule changes THEN the failing test identifies retry semantics rather than unrelated Runner loop behavior.
+    completion:
+      evidence: runner.go now routes model turn retry, session-store load retry, and retry-safe tool execution retry through one internal runRetryOperation state machine while preserving target-specific RetryTarget, RetryReason, ToolCall, ToolSpec, TurnID, EventRetry, EventPolicyDecision, and StopReason payloads. No public API was added or changed.
+      tests: retry_test.go now has focused semantic coverage for model, runtime, and tool retry event reconstruction; cancellation during retry delay; and event sink panic behavior with retry enabled. Existing baseline tests continue to classify unknown tools, policy denial, cancellation, and step limit as non-retry targets.
+      verification: Focused retry gate passed with go test ./... -run 'TestRetry|TestRuntimeBaseline'. Full gates passed with go test ./... and mage check.
+  - number: 4
+    name: Deepen runtime history and event construction
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN a run emits text, policy, tool, retry, error, and stop events WHEN events are collected through Run, Stream, or EventSink THEN ordering, RunID, correlation fields, and final result snapshots match the baseline.
+      - GIVEN an event sink panics WHEN a run proceeds THEN runtime progress and collected events remain consistent with the observational sink contract.
+      - GIVEN a run fails or stops for any existing stop reason WHEN events are inspected THEN the terminal error or stop remains reconstructable without caller knowledge of internal control flow.
+      - GIVEN event invariants are tested WHEN tests fail THEN the failure points at runtime history semantics rather than scattered event construction details.
+    completion:
+      evidence: runner.go now routes text, tool call/result, policy decision, retry, error, and stop event construction through runState event helpers and one eventPayload-to-Event conversion point while preserving public Event fields and sink delivery behavior.
+      tests: event_history_test.go adds focused Run, Stream, EventSink, sink-panic, retry/tool/policy/text/stop, final-result-linkage, and terminal-error reconstruction coverage so event construction or correlation regressions fail in runtime-history tests.
+      verification: Focused gate passed with go test ./... -run 'TestRuntimeHistory|TestRuntimeBehavior|TestStream|TestRetry'. Full gates passed with go test ./... and mage check.
+  - number: 5
+    name: Deepen tool authoring and metadata locality
+    depends_on: [1]
+    status: complete
+    acceptance:
+      - GIVEN a host defines a simple function tool WHEN it is exposed to model requests, policy decisions, events, and execution THEN existing name, schema, input, output, and error behavior matches the baseline.
+      - GIVEN a host defines a ToolDefinition WHEN metadata is exposed to model requests, policy decisions, events, and retry decisions THEN safety and constraints stay consistent across those surfaces.
+      - GIVEN invalid tool definitions or unsupported function shapes are supplied WHEN construction runs THEN failures still happen before runtime execution with useful errors.
+      - GIVEN public tool types are reviewed WHEN the task completes THEN no UI, marketplace, auth, settings, prompt/resource, MCP, sub-agent, or workflow concerns have entered the root tool surface.
+    completion:
+      evidence: tool.go now stores authored function-tool metadata in one internal ToolSpec, so name, description, schema, safety, and constraints have one local representation for NewTool, NewToolWithSchema, and NewToolFromDefinition. runner.go now builds a registeredTool catalog once in NewRunner and uses cached ToolSpec values for model requests, policy decisions, retry context, and event payloads instead of recomputing metadata during tool calls. The retry fix keeps that locality while deep-cloning ToolSchema values at cached/exposed ToolSpec seams so model-visible schema mutation cannot contaminate policy, event, or later-run metadata.
+      tests: runner_test.go adds TestRunnerUsesRegisteredToolMetadataWithoutRediscovery, which fails if Runner probes optional Metadata during Run rather than using construction-time registration metadata. runner_test.go also adds TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns, which mutates TurnRequest.Tools[0].Schema top-level and nested maps inside the model and proves policy metadata, tool-call/tool-result/policy events, and a later run still see the original schema. tool_test.go adds TestNewToolReportsSchemaDerivationMismatchPrecisely and existing focused tool tests continue to cover simple tools, explicit schemas, ToolDefinition metadata, invalid names, empty descriptions, nil schemas, unsupported function shapes, timeout constraints, max-output constraints, input decoding, and returned errors.
+      verification: Retry-cycle focused gate passed with go test ./... -run 'TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns|TestRunnerUsesRegisteredToolMetadataWithoutRediscovery|TestRunnerExposesAdvancedToolDefinitionMetadata|TestNewTool|TestToolDefinition|TestFunctionTool'. Full gates passed with go test ./... and mage check after gofumpt formatting.
+  - number: 6
+    name: Deepen tool execution and retry-safety behavior
+    depends_on: [3, 4, 5]
+    status: complete
+    acceptance:
+      - GIVEN a tool call executes WHEN constraints, input decoding, returned errors, and output limits are exercised THEN behavior matches the baseline.
+      - GIVEN a retry-safe tool fails WHEN retry is considered THEN retry eligibility is derived from the same runtime-visible tool facts used by policy and events.
+      - GIVEN an unsafe tool fails WHEN retry is enabled THEN no repeated tool call occurs and the stop path remains explicit.
+      - GIVEN tool execution behavior is tested WHEN a tool rule changes THEN the failing test identifies tool execution or retry-safety semantics rather than unrelated Runner behavior.
+    completion:
+      evidence: tool_execution.go now owns internal function-tool execution, input decoding, timeout and max-output enforcement, and registeredTool.callWithRetry retry classification. runner.go delegates tool execution retry setup to registeredTool.callWithRetry while preserving runRetryOperation as the single retry state machine and keeping event/policy/session orchestration in Runner.
+      tests: retry_test.go adds TestRunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext, which covers retry-safe input decoding, timeout, and max-output failures through a real Runner and proves retry policy decisions use the same cached ToolSpec safety metadata, ToolCall ID, RetryTargetTool path, error, constrained/exhausted outcomes, and no function invocation for decode failures. Existing retry tests continue to cover safe returned-error retry success, unsafe blocked retry, policy-denied retry, and constrained retry exhaustion.
+      verification: Focused gate passed with go test ./... -run 'Test(FunctionTool|NewTool|ToolDefinition|RunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext|RunnerRetriesSafeToolFailureWithPolicyContextAndEvents|RunnerBlocksUnsafeToolRetryByDefault|RunnerToolRetry|RetrySemanticsExposeTargetAttemptsDelaysAndStops)'. Full gates passed with go test ./... and mage check.
+  - number: 7
+    name: Plan-level freshness checkpoint
+    depends_on: [2, 3, 4, 5, 6]
+    status: complete
+    acceptance:
+      - GIVEN the deepening work completes WHEN repository guidance is reviewed THEN AGENTS.md no longer contradicts the implemented Go runtime state.
+      - GIVEN public behavior is unchanged WHEN README.md, TODO.md, .agentera state, and affected Go package comments are reviewed THEN only necessary freshness updates are made.
+      - GIVEN the full plan completes WHEN local verification runs THEN mage check succeeds or any blocker is recorded.
+      - GIVEN surprises appear during execution WHEN the checkpoint completes THEN they are recorded before handoff or archival.
+    completion:
+      evidence: Reviewed .agentera/plan.yaml, .agentera/progress.yaml, README.md, AGENTS.md, TODO.md, and public Go package comments/docs after Tasks 1-6 passed evaluator review. AGENTS.md no longer describes the repository as pre-implementation or package-empty, TODO.md records this runtime-depth checkpoint as done, and api.go now describes RetryTargetTool as implemented for retry-safe tool calls. README.md roadmap already matched repository reality and remained focused on product/runtime capability status rather than setup bookkeeping.
+      surprises: No new behavior or scope surprise was found during Task 7. The existing Task 1 run-start policy timing surprise remains recorded in plan surprises.
+      verification: mage check passed on 2026-05-07 with package tests, golangci-lint, and govulncheck succeeding.
+overall_acceptance:
+  - GIVEN existing public callers use New, Agent/NewRunner, Tool, ToolDefinition, Policy, Event, Run, or Stream WHEN the plan completes THEN observable behavior remains compatible or any intentional change is recorded before implementation proceeds.
+  - GIVEN maintainers inspect retry, event history, or tool behavior WHEN the plan completes THEN the relevant rules have better locality behind existing seams.
+  - GIVEN tests fail after future runtime changes WHEN the plan completes THEN failures point at real runtime seams rather than a duplicate scripted implementation.
+  - GIVEN Agentera state is read after completion WHEN the plan is reviewed THEN task status, surprises, and repository guidance reflect reality.
+surprises:
+  - date: 2026-05-07
+    task: 1
+    note: The legacy TestRuntimeBehaviorSpecification scripted runtime models denyAllPolicy as a tool-call denial after a model turn, but the real Runner consults explicit policy at DecisionRunStart and stops before model work. This was recorded as a baseline surprise; no runtime behavior was changed.

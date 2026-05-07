@@ -43,7 +43,7 @@ func newServer() (*server, error) {
 
 	runner, err := goagent.New(
 		goagent.WithInstructions("Answer as a concise weather assistant."),
-		goagent.WithModel(&weatherModel{}),
+		goagent.WithModel(goagent.ModelFromSimple(&weatherModel{})),
 		goagent.WithTools(weather),
 		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
 		goagent.WithPolicy(servicePolicy),

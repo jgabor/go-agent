@@ -23,8 +23,17 @@ type ChatModel struct {
 	HTTPClient *http.Client
 }
 
-// Turn implements goagent.Model.
-func (m ChatModel) Turn(ctx context.Context, request goagent.TurnRequest) (goagent.TurnResult, error) {
+// Stream implements goagent.Model.
+func (m ChatModel) Stream(ctx context.Context, request goagent.TurnRequest, emit func(goagent.Event)) error {
+	turn, err := m.turn(ctx, request)
+	if err != nil {
+		return err
+	}
+	goagent.StreamTurnResult(turn, emit)
+	return nil
+}
+
+func (m ChatModel) turn(ctx context.Context, request goagent.TurnRequest) (goagent.TurnResult, error) {
 	if m.Model == "" {
 		return goagent.TurnResult{}, fmt.Errorf("goagent/openai: model is required")
 	}

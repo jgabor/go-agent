@@ -63,7 +63,7 @@ func TestWorkerHonorsCanceledContext(t *testing.T) {
 }
 
 func TestWorkerReportsDeadlineFromModel(t *testing.T) {
-	runner, err := goagent.NewRunner(goagent.Agent{Model: deadlineModel{}})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: goagent.ModelFromSimple(deadlineModel{})})
 	if err != nil {
 		t.Fatal(err)
 	}

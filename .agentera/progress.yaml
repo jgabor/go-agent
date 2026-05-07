@@ -1,4 +1,252 @@
 cycles:
+  - number: 39
+    timestamp: "2026-05-07 08:47"
+    type: docs
+    phase: retry
+    what: Retried Task 7 a second time for the inspektera blocker by correcting stale Pi breakdown ergonomics guidance.
+    commit: "Uncommitted per task constraint"
+    inspiration: Inspektera found that docs/pi-coding-agent-breakdown.md contradicted current repository reality by saying the immediate gap was ergonomics because README uses goagent.New options while implementation exposes only NewRunner(Agent), even though facade.go already exposes New and the same document says to keep New as the low-ceremony facade.
+    discovered: The Pi comparison needed a current-state correction rather than runtime changes. facade.go exposes New plus options over Agent/NewRunner, README uses that facade, and the correct remaining boundary is to keep the facade thin while future CLI/debug/UI/RPC consumers render the streaming-primary Runner.Stream/Event seam instead of forking runtime logic.
+    verified: >-
+      Task 7 second retry updated docs/pi-coding-agent-breakdown.md to say
+      current ergonomics match the README through `goagent.New(...)` and options
+      over explicit `Agent`/`NewRunner` wiring. The recommended next step now
+      preserves `New`/options as a thin facade without provider credential
+      discovery, settings, prompt/resource loading, or product lifecycle behavior,
+      and keeps future guidance aligned with the streaming-primary runtime. Updated
+      Task 7 plan evidence to name this second inspektera retry. Verification
+      passed with `mage check`, `uv run "$HOME/.agents/agentera/scripts/agentera"
+      plan`, `uv run "$HOME/.agents/agentera/scripts/agentera" progress`, and
+      `uv run "$HOME/.agents/agentera/scripts/agentera" todo`.
+    next: Streaming-Primary Runtime Contract plan remains closed; no commit was made.
+    context:
+      intent: Resolve only the second Task 7 inspektera blocker by aligning stale Pi breakdown documentation and Agentera evidence with repository reality.
+      constraints: Blocker-only retry; documentation and Agentera evidence only; preserve library-first boundaries; no runtime code changes; no provider registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, or commit.
+      scope: Pi breakdown documentation, Task 7 plan evidence, latest progress verification, mage check, and Agentera plan/progress/todo checks.
+  - number: 38
+    timestamp: "2026-05-07 08:46"
+    type: docs
+    phase: retry
+    what: Retried Task 7 for the inspektera blocker by correcting stale provider-proof documentation.
+    commit: "Uncommitted per task constraint"
+    inspiration: Inspektera found that docs/streaming-primary-openai-provider-proof.md still described the Task 3 proof as not migrating runtime or providers/openai.ChatModel to the streaming-primary seam, even though current providers/openai/openai.go implements ChatModel.Stream and satisfies goagent.Model.
+    discovered: The proof document needed historical framing rather than runtime changes. ChatModel currently implements the public streaming seam through StreamTurnResult while the provider package still keeps only Model, APIKey, BaseURL, and HTTPClient configuration and does not add registry, auth discovery, marketplace, pricing, workdir, or Lira policy behavior.
+    verified: >-
+      Task 7 retry updated docs/streaming-primary-openai-provider-proof.md to say
+      the Task 3 proof was pre-migration historical evidence and that current
+      providers/openai.ChatModel implements goagent.Model through
+      ChatModel.Stream. Updated Task 7 plan evidence to name the inspektera retry
+      and corrected stale provider-proof doc. Verification passed with `mage
+      check`, `uv run "$HOME/.agents/agentera/scripts/agentera" plan`, and `uv
+      run "$HOME/.agents/agentera/scripts/agentera" progress`.
+    next: Streaming-Primary Runtime Contract plan remains closed; no commit was made.
+    context:
+      intent: Resolve only the Task 7 inspektera blocker by aligning stale provider-proof documentation and Agentera evidence with repository reality.
+      constraints: Blocker-only retry; documentation and Agentera evidence only; preserve library-first boundaries; no runtime code changes; no provider registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, or commit.
+      scope: Provider-proof documentation, Task 7 plan evidence, latest progress verification, mage check, and Agentera plan/progress checks.
+  - number: 37
+    timestamp: "2026-05-07 08:40"
+    type: docs
+    phase: checkpoint
+    what: Completed Task 7 for the Streaming-Primary Runtime Contract by aligning repository docs, backlog, and Agentera state with the implemented streaming-primary runtime.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 7 required README roadmap, package docs, examples, provider docs, AGENTS.md guidance, the Lira gap-analysis follow-up, TODO, and Agentera state to stop contradicting repository reality after Tasks 1-6 migrated the runtime.
+    discovered: The main freshness gap was the Lira gap analysis, which still named Model.Turn, string-only messages/tool results, and missing usage metadata as current go-agent gaps. The README roadmap also needed product-focused wording for the streaming model loop and provider evidence. Package docs, examples, and provider package comments already matched the implemented API. The replacement conclusion did not change: Lira still owns provider registry, auth, CLI subprocesses, workflow policy, workdir behavior, pricing, and product-provider policy.
+    verified: >-
+      Reviewed README.md, AGENTS.md, TODO.md, doc.go, api.go,
+      providers/openai/openai.go, examples/minimal/README.md,
+      examples/cli/README.md, examples/service/README.md,
+      examples/worker/README.md, docs/streaming-primary-contract-boundary.md,
+      docs/pi-coding-agent-breakdown.md,
+      docs/streaming-primary-event-grammar.md,
+      docs/streaming-primary-openai-provider-proof.md, and
+      docs/lira-provider-replacement-gap-analysis.md. Updated README roadmap
+      wording only, AGENTS.md current-reality guidance, TODO done backlog,
+      the Lira gap-analysis freshness follow-up/current-gap entries, and Task 7
+      Agentera state. Verification passed with Agentera plan/progress/todo checks
+      and `mage check`.
+    next: Streaming-Primary Runtime Contract plan is closed; no commit was made.
+    context:
+      intent: Complete the plan-level freshness checkpoint without adding product/provider policy to core.
+      constraints: Task 7 only; documentation and Agentera state freshness edits; preserve library-first boundaries; no provider registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, production refactor, or commit.
+      scope: README roadmap wording, AGENTS.md guidance, TODO done entry, Lira gap-analysis follow-up, Task 7 plan status, progress log, and full verification.
+  - number: 36
+    timestamp: "2026-05-07 08:25"
+    type: feat
+    phase: build
+    what: Completed Task 6 for the Streaming-Primary Runtime Contract by aligning tools, policy, sessions, and metadata with canonical block events.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 6 required structured tool results, policy inspection, session persistence/resume, usage metadata, stop state, and tool safety/retry metadata to remain reconstructable through the new block/event grammar without moving product/provider policy into core.
+    discovered: The remaining mismatch was projection locality rather than provider behavior: tool-result policy decisions were made before the block message existed, stop had no typed policy-inspection decision, RunResult did not expose assembled usage, and session/event snapshots shallow-copied JSON-compatible tool result values.
+    verified: >-
+      api.go now exposes RunResult.Usage plus DecisionStop, Decision.Message,
+      Decision.StopReason, and Decision.Events for stable policy facts. runner.go
+      now creates block-based user messages, creates tool-result block messages
+      before policy inspection, emits EventToolResult with stable block IDs,
+      exposes explicit stop decisions before terminal stop events, carries latest
+      assembled usage into RunResult, and defensively clones messages, blocks,
+      tool-result JSON, decisions, events, and sessions. session_test.go adds
+      TestRunnerPreservesBlockJSONToolResultsAcrossPolicyEventsAndSessions,
+      proving JSON-compatible tool output survives policy views, events, reducer
+      assembly, memory session save/load copies, and resume requests in transcript
+      order with preserved tool-call/tool-result IDs. event_history_test.go and
+      runtime_behavior_test.go now account for explicit stop policy inspection.
+      Existing retry/tool metadata tests continue to prove safety, constraints,
+      retry eligibility, blocked retry, constrained retry, and metadata locality
+      are reconstructable through events. Verification passed: `go test ./...
+      -run
+      'TestRunnerPreservesBlockJSONToolResultsAcrossPolicyEventsAndSessions|TestRuntimeBehaviorSpecification|TestRuntimeHistoryCorrelatesRunStreamSinkAndFinalResult'`,
+      `go test ./...`, Agentera plan/progress checks, and `mage check`.
+    next: Task 7 can perform the plan-level freshness checkpoint.
+    context:
+      intent: Align tool execution projections, policy inspection facts, sessions, and metadata with the streaming-primary runtime contract.
+      constraints: Task 6 only; no commits; no registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, or broad provider coverage.
+      scope: Tool-result block projection, policy DecisionStop/tool-result facts, RunResult usage, session/event defensive copies, focused tests, Task 6 plan status, progress log, and verification.
+  - number: 35
+    timestamp: "2026-05-07 08:19"
+    type: feat
+    phase: build
+    what: Completed Task 5 for the Streaming-Primary Runtime Contract by migrating runtime execution to the canonical stream seam.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 5 required Model execution, Runner.Run, Runner.Stream, and event sinks to consume one canonical event sequence, while preserving simple fake/local model ergonomics through an adapter and keeping setup versus accepted-stream error behavior idiomatic.
+    discovered: The smallest complete break was replacing Model.Turn with Model.Stream(ctx, TurnRequest, emit) while keeping TurnResult only as the SimpleModel adapter output. Retry semantics need to distinguish pre-accept setup failures from accepted stream failures: pre-accept errors can be retried and return ordinary Go errors without response_start/message_final transcript events, while accepted errors are not retried and must already have terminal error/stop events that match the returned Go error.
+    verified: >-
+      api.go now exposes streaming Model, SimpleModel, SimpleModelFunc,
+      ModelFromSimple, StreamTurnResult, and Usage on TurnResult for adapter
+      projection. runner.go now calls model streams, assigns run sequence/RunID,
+      fans out the same canonical events to Run, Stream, and event sinks,
+      assembles accepted turns through the Task 4 reducer before mutating session
+      state or dispatching tools, returns setup errors as Go errors without
+      accepted-turn transcript events, and returns matching Go errors for
+      accepted terminal stream failures. stream_assembly.go now supports
+      multi-turn canonical run reduction and an internal partial-turn reducer for
+      tool-loop continuation. model_adapter.go converts final SimpleModel
+      responses into response_start, content_block_start, text_delta or
+      tool_call_delta, content_block_end, message_final, tool_call_ready, and
+      usage events. providers/openai now implements the streaming Model contract
+      through the adapter without adding provider registry, auth discovery,
+      settings, workdir, pricing, or product policy. streaming_runtime_test.go
+      verifies Run/Stream/sink canonical parity and assembled final results,
+      simple-model adapter streaming, setup failure behavior, and accepted-stream
+      terminal error behavior. Package docs, README usage, examples, and tests
+      compile against the new streaming-primary contract. Verification passed:
+      `go test ./... -run
+      'TestRuntimeConsumesCanonicalStreamForRunStreamAndSinks|TestSimpleModelAdapterStreamsFinalResponse|TestModelSetupFailureReturnsErrorWithoutAcceptedTranscript|TestAcceptedStreamFailureReturnsErrorAndTerminalEvents|TestAssemble'`,
+      `go test ./providers/openai`, `go test ./...`, and `mage check`.
+    next: Task 6 can align tools, policy, sessions, and metadata with the block/event grammar.
+    context:
+      intent: Migrate runtime execution minimally but completely from turn-first model calls to streaming-primary canonical events.
+      constraints: Task 5 only; no commits; no registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, or broad provider coverage.
+      scope: Public model seam, simple-model adapter, Runner stream consumption and assembly, OpenAI adapter compile migration, package docs, README usage, examples, tests, Task 5 plan status, and verification.
+  - number: 34
+    timestamp: "2026-05-07 08:01"
+    type: feat
+    phase: build
+    what: Completed Task 4 for the Streaming-Primary Runtime Contract by adding deterministic stream assembly and replay validation.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 4 required canonical events to become reducible into final transcript messages, tool calls, tool results, usage, stop reason, final text, and terminal error behavior before migrating Runner or providers to streaming-primary execution.
+    discovered: The current Runner and OpenAI-compatible provider remain intentionally turn-first, so the correct Task 4 slice was a production reducer and canonical event/message fields with direct reducer tests, not a runtime/provider migration. Redundant terminal facts need to be rejected in the reducer, because otherwise message_final, terminal error, and stop events can create replay-only contradictions that completion callers would not see.
+    verified: >-
+      Added stream_assembly.go with AssembledRun, StreamDivergenceError,
+      AssembleEvents, AssembleStream, block-message reconstruction, tool-call
+      delta aggregation, tool-result projection, latest usage projection,
+      monotonic sequence validation, accepted-stream terminal error validation,
+      terminal error/usage/stop ordering validation, and contradiction checks for
+      message_final, content_block_end, tool_call_ready, stop, duplicate
+      terminal, post-stop, malformed, and incomplete streams. The first Task 4
+      retry verified terminal EventError is rejected before response_start and
+      response_start plus EventError is rejected without final EventStop. The
+      second Task 4 retry adds a narrow AssembleStream equivalence rule for
+      accepted stream failures: the returned streamErr must match terminal
+      EventError.Err through Go error identity semantics (`errors.Is` in either
+      direction), otherwise AssembleStream returns a deterministic
+      StreamDivergenceError instead of returning one error while replay reports
+      another. api.go exposes block kinds, Blocks on Message, JSON-capable
+      ToolResult, ToolCallDelta, Usage, canonical event kinds, MessageID,
+      BlockID, BlockKind, ToolCallDelta, and Usage event fields without adding
+      provider registry, auth discovery, settings, prompts/resources, CLI shell,
+      MCP, sub-agents, workflow DSL, hosted platform, model marketplace,
+      background shell abstraction, workdir behavior, pricing, Lira policy, or
+      broad provider coverage. stream_assembly_test.go verifies canonical
+      reduction reconstructs final assistant/tool transcript messages, tool
+      calls, tool results including JSON value, usage, stop reason, and final
+      result text; verifies stored-event replay produces an identical result and
+      contradictory replay reports the same deterministic StreamDivergenceError;
+      verifies EventError without response_start is deterministic divergence;
+      verifies response_start plus EventError without EventStop is deterministic
+      divergence; verifies setup errors before accepted events return only the Go
+      error while provider errors before content, accepted-turn stream errors,
+      tool execution errors, context cancellation, and retry exhaustion require
+      terminal error plus stop events and return matching Go errors; verifies
+      mismatched terminal EventError.Err and returned streamErr produce
+      deterministic divergence; verifies policy stops and step limits stop
+      without Go errors; and verifies final, stop, usage, and error events cannot
+      contradict each other. Retry verification passed with `gofmt -w
+      stream_assembly.go stream_assembly_test.go`, `go test ./... -run
+      'TestAssemble'`, `uv run "$HOME/.agents/agentera/scripts/agentera" plan`,
+      `uv run "$HOME/.agents/agentera/scripts/agentera" progress`, `go test
+      ./...`, and `mage check`.
+    next: Task 5 can migrate runtime execution to consume the canonical stream through the reducer.
+    context:
+      intent: Build the deterministic stream assembly bridge required before streaming-primary runtime migration.
+      constraints: Task 4 only; no Runner/provider migration; no registry, auth discovery, settings, prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira policy, broad provider coverage, or commits.
+      scope: Public canonical event/message/usage fields, deterministic reducer, focused reducer tests, Task 4 plan status/evidence, progress log, and verification.
+  - number: 33
+    timestamp: "2026-05-07 07:57"
+    type: test
+    phase: build
+    what: Completed Task 3 for the Streaming-Primary Runtime Contract by proving OpenAI-compatible provider behavior against the draft event grammar.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 3 required a provider proof before runtime migration, covering streaming text, tool calls, usage, finish reasons, setup failures, accepted-turn provider failures, bounded diagnostics, and confirmation that provider registry/auth discovery/selection/marketplace behavior stayed outside core.
+    discovered: The existing providers/openai package is still intentionally non-streaming, so the correct Task 3 slice was a proof-only harness and review artifact, not a runtime/provider seam migration. Simulated OpenAI-compatible choice deltas, tool-call indexes, finish reasons, usage, and failures all fit the Task 2 grammar when wire-specific facts normalize into canonical payloads plus diagnostics.
+    verified: Added docs/streaming-primary-openai-provider-proof.md and providers/openai/streaming_grammar_proof_test.go. The proof simulates text streaming, indexed tool-call streaming, usage, raw finish reasons, setup errors before stream acceptance, and accepted provider errors after response_start; asserts no proof event fields are OpenAI/chunk/choice/finish-reason specific; asserts terminal ordering where accepted errors are followed only by optional usage and final stop, with no events after stop; asserts diagnostics retain request IDs, openai-compatible provider identity, package identity, raw stop reasons, and non-secret metadata while excluding credentials, authorization, API keys, registry, marketplace, pricing, and Lira policy; and asserts ChatModel fields remain Model, APIKey, BaseURL, and HTTPClient with no custom auth discovery, provider registry, provider selection, marketplace, workdir, pricing, or product policy surface. Focused provider gate passed with `gofmt -w providers/openai/streaming_grammar_proof_test.go && go test ./providers/openai -run 'TestOpenAICompatible'`. Full verification passed with `go test ./...`, `uv run "$HOME/.agents/agentera/scripts/agentera" plan`, `uv run "$HOME/.agents/agentera/scripts/agentera" progress`, and `mage check`.
+    next: Task 4 can build deterministic stream assembly from the proven grammar before runtime migration begins.
+    context:
+      intent: Prove the Task 2 event grammar is sufficient for OpenAI-compatible streaming behavior without changing the current runtime/provider implementation.
+      constraints: Task 3 only; proof and docs only; no broad runtime migration; no provider registry, custom auth discovery, provider selection, model marketplace, pricing, workdir, or Lira policy in core; do not commit.
+      scope: OpenAI-compatible grammar proof test, provider proof document, Task 3 plan status/evidence, progress log, and focused verification.
+  - number: 32
+    timestamp: "2026-05-07 08:45"
+    type: docs
+    phase: build
+    what: Retried Task 2 evaluation failure by resolving the terminal error/stop ordering contradiction.
+    commit: "Uncommitted per task constraint"
+    inspiration: Evaluation found that the grammar allowed terminal error after stop while also declaring stop final, so Task 2 evidence needed a retry-scoped correction without runtime or provider migration.
+    discovered: The smallest consistent rule is that terminal error can only occur before stop. After terminal error, only optional usage metadata and the required final stop may follow; after stop, no event of any kind may follow.
+    verified: Latest Task 2 evidence now substantiates the full grammar acceptance criteria and the retry fix. docs/streaming-primary-event-grammar.md represents transcript text, tool-call, and tool-result blocks without provider-specific parsing; defines response start, delta, block end, final message, usage, stop, and error ordering; covers incremental tool-call partial names, argument deltas, call IDs, concurrent calls, malformed streams, incomplete streams, and finalization before execution; allows token/cache/request usage metadata while excluding cost, pricing, budget policy, marketplace metadata, and Lira cost policy; and allows max output tokens, temperature, reasoning effort, stop sequences, response format, and bounded host-supplied provider extensions while excluding auth, registry, provider selection, persisted settings, pricing, workdir, and Lira policy. The retry correction removes the stop-already-emitted exception, makes terminal ordering deterministic, requires terminal error to occur only before final stop, and forbids every event after stop. Updated Task 2 plan evidence names the deterministic terminal rule. Focused artifact verification passed with `uv run "$HOME/.agents/agentera/scripts/agentera" plan` and `uv run "$HOME/.agents/agentera/scripts/agentera" progress`. No runtime, provider, session, example, product/provider policy, pricing, registry, auth, settings, workdir, or Lira policy behavior was migrated.
+    next: Task 3 can proceed after Task 2 retry evaluation passes.
+    context:
+      intent: Fix Task 2's event grammar contradiction so accepted-run terminal streams reduce deterministically.
+      constraints: Retry scope only; docs and Agentera state only; no runtime behavior migration; no product/provider policy expansion; do not commit.
+      scope: Terminal ordering grammar, Task 2 evidence, progress log, and focused verification.
+  - number: 31
+    timestamp: "2026-05-07 08:20"
+    type: docs
+    phase: build
+    what: Completed Task 2 for the Streaming-Primary Runtime Contract by specifying the event and block-message grammar.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 2 required grammar only, not runtime migration, with provider-neutral representation for transcript blocks, streaming event ordering, incremental tool-call streams, generic usage metadata, and generic turn options while preserving core scope exclusions.
+    discovered: The current implementation remains turn-first and string-message-based, so the correct slice was a standalone target-contract document. Tool-call streaming needs explicit three-step finalization before execution: block end, assistant message finalization, and tool-call-ready emission, because executing from partial names or incomplete JSON arguments would make replay and policy nondeterministic.
+    verified: Added docs/streaming-primary-event-grammar.md with block-message fields/kinds, canonical event envelope/kinds, ordering rules for response_start, deltas, block ends, message_final, usage, stop, and terminal errors, streamed tool-call grammar for partial names/arguments, generated/preserved call IDs, concurrent calls, malformed and incomplete streams, usage metadata boundaries, generic option boundaries, reducer outputs, and explicit non-goals. No runtime, provider, session, example, registry, auth, settings, prompts/resources, CLI shell, MCP, sub-agent, workflow DSL, workdir, pricing, or Lira policy behavior was migrated. Focused verification passed with `uv run "$HOME/.agents/agentera/scripts/agentera" plan`, `uv run "$HOME/.agents/agentera/scripts/agentera" progress`, and `go test ./...`.
+    next: Task 3 can prove the grammar against the existing OpenAI-compatible provider behavior before runtime migration begins.
+    context:
+      intent: Specify the canonical streaming grammar so later implementation and provider proof work can target a non-contradictory reducer contract.
+      constraints: Task 2 only; docs and Agentera state only; no runtime behavior migration; no provider registry, auth, settings, prompts, resources, CLI shell behavior, MCP, sub-agents, workflow DSL, workdir behavior, pricing, marketplace metadata, budget policy, or Lira policy; do not commit.
+      scope: Event/message grammar document, Task 2 plan status/evidence, progress log, and focused verification.
+  - number: 30
+    timestamp: "2026-05-07 07:47"
+    type: docs
+    phase: build
+    what: Completed Task 1 for the Streaming-Primary Runtime Contract by defining the breaking public contract boundary.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 1 required a review of current Run, Stream, Model, Message, ToolResult, provider, session, and event behavior before any runtime redesign implementation, with explicit named breaks and non-goal guardrails.
+    discovered: The current API is consistently turn-first: Model.Turn returns whole TurnResult values, Runner.Stream relays events synthesized by the non-streaming run loop, Message.Content and ToolResult.Content are strings, Session.Messages persists that string transcript shape, and the OpenAI-compatible provider is non-streaming. README and examples intentionally compile against those old seams today, so later compile failures must map back to named contract breaks rather than accidental drift.
+    verified: Added docs/streaming-primary-contract-boundary.md with current-contract evidence, intentional breaks by method/type/field/event/semantic behavior, explicit non-goals for registry/auth/settings/prompts/resources/CLI shell/MCP/sub-agents/workflow DSL/workdir/pricing/Lira policy, and persistence classifications of old session/event shapes as migrated, rejected, or unsupported. Reviewed api.go, runner.go, tool.go, session.go, facade.go, providers/openai/openai.go, doc.go, README.md, docs/lira-provider-replacement-gap-analysis.md, and examples/minimal/cli/service/worker. Minimal verification ran with go test ./... and passed.
+    next: Task 2 can specify the canonical event and block-message grammar; no runtime redesign implementation was started in Task 1.
+    context:
+      intent: Declare the break boundary so future implementation compile failures are deliberate consequences of the streaming-primary contract.
+      constraints: Task 1 only; docs and Agentera state only; no provider registry, auth, settings, prompts, resources, CLI shell behavior, MCP, sub-agents, workflow DSL, workdir behavior, pricing, or Lira policy; do not commit.
+      scope: Boundary document, Task 1 plan status/evidence, progress log, and minimal Go test verification.
   - number: 29
     timestamp: "2026-05-07 00:45"
     type: docs

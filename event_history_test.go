@@ -14,8 +14,8 @@ func TestRuntimeHistoryCorrelatesRunStreamSinkAndFinalResult(t *testing.T) {
 	runResult, runObserved := runEventHistoryScenario(t, false)
 	streamEvents, streamObserved := streamEventHistoryScenario(t)
 
-	wantKinds := []goagent.EventKind{
-		goagent.EventPolicyDecision,
+	wantKinds := append([]goagent.EventKind{goagent.EventPolicyDecision}, toolCallEvents()...)
+	wantKinds = append(wantKinds,
 		goagent.EventToolCall,
 		goagent.EventPolicyDecision,
 		goagent.EventRetry,
@@ -25,9 +25,9 @@ func TestRuntimeHistoryCorrelatesRunStreamSinkAndFinalResult(t *testing.T) {
 		goagent.EventRetry,
 		goagent.EventPolicyDecision,
 		goagent.EventToolResult,
-		goagent.EventTextDelta,
-		goagent.EventStop,
-	}
+	)
+	wantKinds = append(wantKinds, textTurnEvents()[:len(textTurnEvents())-1]...)
+	wantKinds = append(wantKinds, goagent.EventPolicyDecision, goagent.EventStop)
 	assertEventKinds(t, runResult.Events, wantKinds)
 	assertEventKinds(t, streamEvents, wantKinds)
 	assertSameEventShape(t, runResult.Events, streamEvents)
@@ -61,7 +61,7 @@ func TestRuntimeHistoryTerminalEventsAreReconstructable(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Go"})
-	if err != nil {
+	if !errors.Is(err, modelErr) {
 		t.Fatal(err)
 	}
 
@@ -178,9 +178,14 @@ func assertRuntimeHistoryResultLinkage(t *testing.T, result goagent.RunResult) {
 		t.Fatalf("final event = %+v, result stop = %q", last, result.StopReason)
 	}
 	if !slices.ContainsFunc(result.Events, func(event goagent.Event) bool {
-		return event.Kind == goagent.EventTextDelta && event.Text == result.Text && event.Message.Content == result.Text
+		return event.Kind == goagent.EventTextDelta && event.Text == result.Text
 	}) {
 		t.Fatalf("result text %q not linked to text event: %+v", result.Text, result.Events)
+	}
+	if !slices.ContainsFunc(result.Events, func(event goagent.Event) bool {
+		return event.Kind == goagent.EventMessageFinal && event.Message.Content == result.Text
+	}) {
+		t.Fatalf("result text %q not linked to final message: %+v", result.Text, result.Events)
 	}
 	assertRetryEvents(t, result.Events, []retryEventSpec{
 		{target: goagent.RetryTargetTool, reason: goagent.RetryReasonToolError, attempt: 1, maxAttempts: 2, outcome: goagent.RetryOutcomeFailed, toolCallID: "call-1", toolName: "weather"},

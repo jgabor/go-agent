@@ -21,7 +21,7 @@ func main() {
 
 	runner, err := goagent.New(
 		goagent.WithInstructions("Give practical weather advice."),
-		goagent.WithModel(&weatherModel{}),
+		goagent.WithModel(goagent.ModelFromSimple(&weatherModel{})),
 		goagent.WithTools(weather),
 		goagent.WithEventSinks(goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {
 			if event.Kind == goagent.EventStop {

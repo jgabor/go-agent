@@ -57,7 +57,7 @@ func newWorker() (*worker, error) {
 
 	runner, err := goagent.New(
 		goagent.WithInstructions("Process background jobs with concise operational summaries."),
-		goagent.WithModel(&jobModel{}),
+		goagent.WithModel(goagent.ModelFromSimple(&jobModel{})),
 		goagent.WithTools(lookup),
 		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
 		goagent.WithEventSinks(goagent.EventSinkFunc(func(ctx context.Context, event goagent.Event) {

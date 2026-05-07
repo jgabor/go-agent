@@ -17,7 +17,7 @@ var (
 	_ goagent.Runner = fakeRunner{}
 )
 
-func TestModelTurnContractCarriesMessagesToolsAndSession(t *testing.T) {
+func TestModelStreamContractCarriesMessagesToolsAndSession(t *testing.T) {
 	request := goagent.TurnRequest{
 		Instructions: "Answer with weather advice.",
 		Messages: []goagent.Message{
@@ -39,15 +39,22 @@ func TestModelTurnContractCarriesMessagesToolsAndSession(t *testing.T) {
 		Session: goagent.Session{ID: "session-1"},
 	}
 
-	result, err := fakeModel{}.Turn(context.Background(), request)
+	var events []goagent.Event
+	err := fakeModel{}.Stream(context.Background(), request, func(event goagent.Event) {
+		events = append(events, event)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StopReason != goagent.StopComplete {
-		t.Fatalf("StopReason = %q, want %q", result.StopReason, goagent.StopComplete)
+	assembled, err := goagent.AssembleStream(append(events, goagent.Event{Kind: goagent.EventStop, StopReason: goagent.StopComplete}), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if result.Message.Role != goagent.RoleAssistant {
-		t.Fatalf("Message.Role = %q, want %q", result.Message.Role, goagent.RoleAssistant)
+	if assembled.StopReason != goagent.StopComplete {
+		t.Fatalf("StopReason = %q, want %q", assembled.StopReason, goagent.StopComplete)
+	}
+	if assembled.Messages[0].Role != goagent.RoleAssistant {
+		t.Fatalf("Message.Role = %q, want %q", assembled.Messages[0].Role, goagent.RoleAssistant)
 	}
 }
 
@@ -92,6 +99,15 @@ func (fakeModel) Turn(_ context.Context, request goagent.TurnRequest) (goagent.T
 		Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "Bring a jacket."},
 		StopReason: goagent.StopComplete,
 	}, nil
+}
+
+func (m fakeModel) Stream(ctx context.Context, request goagent.TurnRequest, emit func(goagent.Event)) error {
+	turn, err := m.Turn(ctx, request)
+	if err != nil {
+		return err
+	}
+	goagent.StreamTurnResult(turn, emit)
+	return nil
 }
 
 type fakeTool struct{}

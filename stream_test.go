@@ -30,10 +30,7 @@ func TestStreamNormalCompletion(t *testing.T) {
 		collected = append(collected, event)
 	}
 
-	assertEventKinds(t, collected, []goagent.EventKind{
-		goagent.EventTextDelta,
-		goagent.EventStop,
-	})
+	assertEventKinds(t, collected, textTurnEvents())
 	assertOrderedCorrelatedEvents(t, collected)
 
 	last := collected[len(collected)-1]
@@ -69,13 +66,7 @@ func TestStreamMultiTurnWithToolDispatch(t *testing.T) {
 		collected = append(collected, event)
 	}
 
-	assertEventKinds(t, collected, []goagent.EventKind{
-		goagent.EventToolCall,
-		goagent.EventPolicyDecision,
-		goagent.EventToolResult,
-		goagent.EventTextDelta,
-		goagent.EventStop,
-	})
+	assertEventKinds(t, collected, toolThenTextEvents())
 	assertOrderedCorrelatedEvents(t, collected)
 
 	var toolCallEvent goagent.Event
@@ -208,16 +199,10 @@ func TestStreamEventSequenceIsMonotonic(t *testing.T) {
 		}
 	}
 
-	wantKinds := []goagent.EventKind{
-		goagent.EventToolCall,
-		goagent.EventPolicyDecision,
-		goagent.EventToolResult,
-		goagent.EventToolCall,
-		goagent.EventPolicyDecision,
-		goagent.EventToolResult,
-		goagent.EventTextDelta,
-		goagent.EventStop,
-	}
+	wantKinds := append(toolCallEvents(), goagent.EventToolCall, goagent.EventPolicyDecision, goagent.EventToolResult)
+	wantKinds = append(wantKinds, toolCallEvents()...)
+	wantKinds = append(wantKinds, goagent.EventToolCall, goagent.EventPolicyDecision, goagent.EventToolResult)
+	wantKinds = append(wantKinds, textTurnEvents()...)
 	assertEventKinds(t, collected, wantKinds)
 }
 

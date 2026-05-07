@@ -20,6 +20,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 		agent      goagent.Agent
 		wantStop   goagent.StopReason
 		wantEvents []goagent.EventKind
+		wantErr    bool
 		assert     func(*testing.T, goagent.RunResult, goagent.Agent)
 	}{
 		{
@@ -31,7 +32,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 				StopReason: goagent.StopComplete,
 			}}}},
 			wantStop:   goagent.StopComplete,
-			wantEvents: []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop},
+			wantEvents: textTurnEvents(),
 		},
 		{
 			name:    "tool call dispatch",
@@ -47,14 +48,8 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 				}},
 				Tools: []goagent.Tool{namedTool{name: "weather"}},
 			},
-			wantStop: goagent.StopComplete,
-			wantEvents: []goagent.EventKind{
-				goagent.EventToolCall,
-				goagent.EventPolicyDecision,
-				goagent.EventToolResult,
-				goagent.EventTextDelta,
-				goagent.EventStop,
-			},
+			wantStop:   goagent.StopComplete,
+			wantEvents: toolThenTextEvents(),
 		},
 		{
 			name:    "tool error",
@@ -64,13 +59,8 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 				Model: &recordingModel{turns: []goagent.TurnResult{{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}}}},
 				Tools: []goagent.Tool{namedTool{name: "weather", err: errors.New("tool failed")}},
 			},
-			wantStop: goagent.StopToolError,
-			wantEvents: []goagent.EventKind{
-				goagent.EventToolCall,
-				goagent.EventPolicyDecision,
-				goagent.EventError,
-				goagent.EventStop,
-			},
+			wantStop:   goagent.StopToolError,
+			wantEvents: append(toolCallEvents(), goagent.EventToolCall, goagent.EventPolicyDecision, goagent.EventError, goagent.EventStop),
 		},
 		{
 			name:       "model error",
@@ -79,6 +69,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			agent:      goagent.Agent{Model: &recordingModel{err: errors.New("model failed")}},
 			wantStop:   goagent.StopModelError,
 			wantEvents: []goagent.EventKind{goagent.EventError, goagent.EventStop},
+			wantErr:    true,
 		},
 		{
 			name:       "cancellation",
@@ -107,6 +98,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			wantStop: goagent.StopPolicyDenied,
 			wantEvents: []goagent.EventKind{
 				goagent.EventPolicyDecision,
+				goagent.EventPolicyDecision,
 				goagent.EventStop,
 			},
 			assert: func(t *testing.T, result goagent.RunResult, agent goagent.Agent) {
@@ -134,13 +126,8 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 				}},
 				Tools: []goagent.Tool{namedTool{name: "weather"}},
 			},
-			wantStop: goagent.StopStepLimit,
-			wantEvents: []goagent.EventKind{
-				goagent.EventToolCall,
-				goagent.EventPolicyDecision,
-				goagent.EventToolResult,
-				goagent.EventStop,
-			},
+			wantStop:   goagent.StopStepLimit,
+			wantEvents: append(toolCallEvents(), goagent.EventToolCall, goagent.EventPolicyDecision, goagent.EventToolResult, goagent.EventStop),
 		},
 	}
 
@@ -152,7 +139,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			}
 
 			result, err := runner.Run(tt.ctx, tt.request)
-			if err != nil {
+			if (err != nil) != tt.wantErr {
 				t.Fatal(err)
 			}
 			if result.StopReason != tt.wantStop {
@@ -185,7 +172,7 @@ func TestRuntimeBehaviorStreamUsesRunnerEvents(t *testing.T) {
 	for event := range events {
 		got = append(got, event)
 	}
-	assertEventKinds(t, got, []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop})
+	assertEventKinds(t, got, textTurnEvents())
 	assertOrderedCorrelatedEvents(t, got)
 }
 
@@ -232,6 +219,33 @@ func assertEventKinds(t *testing.T, events []goagent.Event, want []goagent.Event
 	if !slices.Equal(got, want) {
 		t.Fatalf("event kinds = %v, want %v", got, want)
 	}
+}
+
+func textTurnEvents() []goagent.EventKind {
+	return []goagent.EventKind{
+		goagent.EventResponseStart,
+		goagent.EventContentBlockStart,
+		goagent.EventTextDelta,
+		goagent.EventContentBlockEnd,
+		goagent.EventMessageFinal,
+		goagent.EventStop,
+	}
+}
+
+func toolCallEvents() []goagent.EventKind {
+	return []goagent.EventKind{
+		goagent.EventResponseStart,
+		goagent.EventContentBlockStart,
+		goagent.EventToolCallDelta,
+		goagent.EventContentBlockEnd,
+		goagent.EventMessageFinal,
+		goagent.EventToolCallReady,
+	}
+}
+
+func toolThenTextEvents() []goagent.EventKind {
+	events := append(toolCallEvents(), goagent.EventToolCall, goagent.EventPolicyDecision, goagent.EventToolResult)
+	return append(events, textTurnEvents()...)
 }
 
 func assertOrderedCorrelatedEvents(t *testing.T, events []goagent.Event) {

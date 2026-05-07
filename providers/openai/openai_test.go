@@ -31,7 +31,7 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 	defer server.Close()
 
 	model := openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}
-	result, err := model.Turn(context.Background(), goagent.TurnRequest{
+	events, err := streamChatModel(model, goagent.TurnRequest{
 		Instructions: "Answer briefly.",
 		Messages: []goagent.Message{
 			{Role: goagent.RoleUser, Content: "Weather?"},
@@ -40,6 +40,10 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 		},
 		Tools: []goagent.ToolSpec{{Name: "weather", Description: "Get weather.", Schema: goagent.ToolSchema{"type": "object"}}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := goagent.AssembleStream(append(events, goagent.Event{Kind: goagent.EventStop, StopReason: goagent.StopComplete}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +66,8 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 	if len(got.Tools) != 1 || got.Tools[0].Type != "function" || got.Tools[0].Function.Name != "weather" {
 		t.Fatalf("tools = %+v", got.Tools)
 	}
-	if result.Message.Content != "Bring a jacket." || result.StopReason != goagent.StopComplete {
-		t.Fatalf("TurnResult = %+v", result)
+	if result.Text != "Bring a jacket." || result.StopReason != goagent.StopComplete {
+		t.Fatalf("assembled result = %+v", result)
 	}
 }
 
@@ -75,21 +79,21 @@ func TestChatModelParsesToolCalls(t *testing.T) {
 	defer server.Close()
 
 	model := openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}
-	result, err := model.Turn(context.Background(), goagent.TurnRequest{})
+	events, err := streamChatModel(model, goagent.TurnRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if result.StopReason != "" {
-		t.Fatalf("StopReason = %q, want empty while tool calls are pending", result.StopReason)
+	var ready goagent.Event
+	for _, event := range events {
+		if event.Kind == goagent.EventToolCallReady {
+			ready = event
+		}
 	}
-	if len(result.ToolCalls) != 1 {
-		t.Fatalf("ToolCalls = %+v", result.ToolCalls)
+	if ready.Kind == "" {
+		t.Fatalf("events missing tool_call_ready: %+v", events)
 	}
-	if len(result.Message.ToolCalls) != 1 {
-		t.Fatalf("Message.ToolCalls = %+v", result.Message.ToolCalls)
-	}
-	call := result.ToolCalls[0]
+	call := ready.ToolCall
 	if call.ID != "call-1" || call.Name != "weather" || string(call.Input) != `{"city":"Austin"}` {
 		t.Fatalf("ToolCall = %+v", call)
 	}
@@ -102,19 +106,27 @@ func TestChatModelReportsProviderErrors(t *testing.T) {
 	defer server.Close()
 
 	model := openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}
-	_, err := model.Turn(context.Background(), goagent.TurnRequest{})
+	err := model.Stream(context.Background(), goagent.TurnRequest{}, func(goagent.Event) {})
 	if err == nil || !strings.Contains(err.Error(), "status 400") {
 		t.Fatalf("error = %v, want status 400", err)
 	}
 }
 
 func TestChatModelValidatesConfiguration(t *testing.T) {
-	if _, err := (openai.ChatModel{APIKey: "test-key"}).Turn(context.Background(), goagent.TurnRequest{}); err == nil || !strings.Contains(err.Error(), "model is required") {
+	if err := (openai.ChatModel{APIKey: "test-key"}).Stream(context.Background(), goagent.TurnRequest{}, func(goagent.Event) {}); err == nil || !strings.Contains(err.Error(), "model is required") {
 		t.Fatalf("missing model error = %v", err)
 	}
-	if _, err := (openai.ChatModel{Model: "gpt-test"}).Turn(context.Background(), goagent.TurnRequest{}); err == nil || !strings.Contains(err.Error(), "API key is required") {
+	if err := (openai.ChatModel{Model: "gpt-test"}).Stream(context.Background(), goagent.TurnRequest{}, func(goagent.Event) {}); err == nil || !strings.Contains(err.Error(), "API key is required") {
 		t.Fatalf("missing API key error = %v", err)
 	}
+}
+
+func streamChatModel(model openai.ChatModel, request goagent.TurnRequest) ([]goagent.Event, error) {
+	var events []goagent.Event
+	err := model.Stream(context.Background(), request, func(event goagent.Event) {
+		events = append(events, event)
+	})
+	return events, err
 }
 
 type requestBody struct {

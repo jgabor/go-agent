@@ -100,7 +100,7 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 	}
 	state.session = loaded
 	if request.Input != "" {
-		state.session.Messages = append(state.session.Messages, Message{Role: RoleUser, Content: request.Input})
+		state.session.Messages = append(state.session.Messages, textMessage(RoleUser, request.Input))
 	}
 
 	maxSteps := request.MaxSteps
@@ -112,7 +112,7 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 		return r.saveResult(ctx, state.fail(StopPolicyDenied, eventPayload{err: err}))
 	}
 	if !runDecision.Allowed {
-		return r.saveResult(ctx, state.finish(StopPolicyDenied))
+		return r.saveResult(ctx, r.finish(ctx, &state, "", StopPolicyDenied))
 	}
 	if runDecision.MaxSteps > 0 && runDecision.MaxSteps < maxSteps {
 		maxSteps = runDecision.MaxSteps
@@ -123,11 +123,11 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			return r.saveResult(ctx, state.fail(StopCanceled, eventPayload{err: err}))
 		}
 		if step >= maxSteps {
-			return r.saveResult(ctx, state.finish(StopStepLimit))
+			return r.saveResult(ctx, r.finish(ctx, &state, "", StopStepLimit))
 		}
 
 		turnID := fmt.Sprintf("turn-%d", step+1)
-		turn, stopReason, err := r.turnModel(ctx, &state, turnID, TurnRequest{
+		turn, stopReason, err := r.streamModel(ctx, &state, turnID, TurnRequest{
 			Instructions: r.instructions,
 			Messages:     append([]Message(nil), state.session.Messages...),
 			Tools:        cloneToolSpecs(r.toolSpecs),
@@ -137,32 +137,41 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			if stopReason == "" {
 				stopReason = StopModelError
 			}
-			return r.saveResult(ctx, state.fail(stopReason, eventPayload{turnID: turnID, err: err}))
+			if turn.accepted {
+				if turn.assembled.StopReason != "" {
+					stopReason = turn.assembled.StopReason
+				}
+				result, saveErr := r.saveResult(ctx, state.result(stopReason))
+				if saveErr != nil {
+					return result, saveErr
+				}
+				return result, err
+			}
+			result, saveErr := r.saveResult(ctx, state.fail(stopReason, eventPayload{turnID: turnID, err: err}))
+			if saveErr != nil {
+				return result, saveErr
+			}
+			return result, err
 		}
 
-		if turn.Message.Content != "" || turn.Message.Role != "" || len(turn.ToolCalls) > 0 {
-			message := turn.Message
-			if message.Role == "" {
-				message.Role = RoleAssistant
-			}
-			if len(message.ToolCalls) == 0 {
-				message.ToolCalls = append([]ToolCall(nil), turn.ToolCalls...)
-			}
-			state.session.Messages = append(state.session.Messages, message)
-			if message.Content != "" {
-				state.text += message.Content
-				state.textDelta(turnID, message)
-			}
+		state.session.Messages = append(state.session.Messages, turn.assembled.Messages...)
+		state.text += turn.assembled.Text
+		if !turn.assembled.Usage.empty() {
+			state.usage = turn.assembled.Usage
 		}
 
-		if len(turn.ToolCalls) == 0 {
-			if turn.StopReason == "" {
-				turn.StopReason = StopComplete
+		if len(turn.assembled.ToolCalls) == 0 {
+			stop := turn.assembled.StopReason
+			if stop != "" {
+				return r.saveResult(ctx, state.result(stop))
 			}
-			return r.saveResult(ctx, state.finish(turn.StopReason))
+			if stop == "" {
+				stop = StopComplete
+			}
+			return r.saveResult(ctx, r.finish(ctx, &state, turnID, stop))
 		}
 
-		for _, call := range turn.ToolCalls {
+		for _, call := range turn.assembled.ToolCalls {
 			if err := r.callTool(ctx, &state, turnID, call); err != nil {
 				return r.saveResult(ctx, *err)
 			}
@@ -170,18 +179,106 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 	}
 }
 
-func (r *runner) turnModel(ctx context.Context, state *runState, turnID string, request TurnRequest) (TurnResult, StopReason, error) {
-	return runRetryOperation(ctx, r, retryOperation[TurnResult]{
+type modelTurnStream struct {
+	assembled AssembledRun
+	accepted  bool
+}
+
+func (r *runner) streamModel(ctx context.Context, state *runState, turnID string, request TurnRequest) (modelTurnStream, StopReason, error) {
+	operation := retryOperation[modelTurnStream]{
 		state:        state,
 		turnID:       turnID,
 		target:       RetryTarget{Kind: RetryTargetModel, TurnID: turnID},
 		reason:       RetryReasonModelError,
 		disabledStop: StopModelError,
 		retryable:    true,
-		call: func() (TurnResult, error) {
-			return r.model.Turn(ctx, request)
+		call: func() (modelTurnStream, error) {
+			return r.callModelStream(ctx, state, turnID, request)
 		},
+	}
+	if r.retry.MaxAttempts <= 1 {
+		turn, err := operation.call()
+		return turn, operation.disabledStop, err
+	}
+	return r.retryModel(ctx, operation)
+}
+
+func (r *runner) callModelStream(ctx context.Context, state *runState, turnID string, request TurnRequest) (modelTurnStream, error) {
+	var events []Event
+	err := r.model.Stream(ctx, request, func(event Event) {
+		event.TurnID = defaultString(event.TurnID, turnID)
+		state.modelEvent(event)
+		events = append(events, event)
 	})
+	if len(events) == 0 {
+		return modelTurnStream{}, err
+	}
+	assembled, assembleErr := assembleTurnEvents(events)
+	if assembleErr != nil {
+		return modelTurnStream{assembled: assembled, accepted: true}, assembleErr
+	}
+	if err != nil {
+		if assembled.Err == nil {
+			return modelTurnStream{assembled: assembled, accepted: true}, StreamDivergenceError{EventIndex: len(events) - 1, Reason: "accepted stream error missing terminal error event"}
+		}
+		if !sameStreamError(err, assembled.Err) {
+			return modelTurnStream{assembled: assembled, accepted: true}, StreamDivergenceError{EventIndex: terminalErrorIndex(events), Reason: "stream error does not match terminal error event"}
+		}
+	}
+	return modelTurnStream{assembled: assembled, accepted: true}, err
+}
+
+func (r *runner) retryModel(ctx context.Context, operation retryOperation[modelTurnStream]) (modelTurnStream, StopReason, error) {
+	maxAttempts := r.retry.MaxAttempts
+	delay := r.retry.Delay
+	for attempt := 1; ; attempt++ {
+		value, err := operation.call()
+		if err == nil {
+			if attempt > 1 {
+				operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: attempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeSucceeded})
+			}
+			return value, "", nil
+		}
+		if value.accepted {
+			return value, StopModelError, err
+		}
+
+		operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: attempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeFailed})
+		nextAttempt := attempt + 1
+		if nextAttempt > maxAttempts {
+			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: attempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeExhausted, StopReason: StopRetryExhausted})
+			return modelTurnStream{}, StopRetryExhausted, err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: attempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeCanceled, StopReason: StopCanceled})
+			return modelTurnStream{}, StopCanceled, ctxErr
+		}
+		operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeConsidered, Delay: delay})
+		decision, policyErr := r.decide(ctx, operation.state, operation.turnID, Decision{Kind: DecisionRetry, Retry: operation.context(nextAttempt, maxAttempts, err), Request: operation.state.request, Session: operation.state.session})
+		if policyErr != nil {
+			return modelTurnStream{}, StopPolicyDenied, policyErr
+		}
+		if !decision.Allowed {
+			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeDenied, StopReason: StopPolicyDenied})
+			return modelTurnStream{}, StopPolicyDenied, err
+		}
+		if decision.Retry.MaxAttempts > 0 && decision.Retry.MaxAttempts < maxAttempts {
+			maxAttempts = decision.Retry.MaxAttempts
+			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeConstrained, Delay: delay})
+			if nextAttempt > maxAttempts {
+				operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: attempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeExhausted, StopReason: StopRetryExhausted})
+				return modelTurnStream{}, StopRetryExhausted, err
+			}
+		}
+		if decision.Retry.Delay > delay {
+			delay = decision.Retry.Delay
+		}
+		if err := sleep(ctx, delay); err != nil {
+			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeCanceled, Delay: delay, StopReason: StopCanceled})
+			return modelTurnStream{}, StopCanceled, err
+		}
+		operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeAttempted, Delay: delay})
+	}
 }
 
 func sleep(ctx context.Context, delay time.Duration) error {
@@ -272,7 +369,7 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 		return &result
 	}
 	if !policyDecision.Allowed {
-		returnResult := state.finish(StopPolicyDenied)
+		returnResult := r.finish(ctx, state, turnID, StopPolicyDenied)
 		return &returnResult
 	}
 	if policyDecision.ToolCall != nil {
@@ -296,23 +393,39 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 		result := state.fail(stopReason, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, toolCall: call, err: err})
 		return &result
 	}
-	resultDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolResult, ToolCall: call, Tool: spec, ToolResult: toolResult, Session: state.session})
+	message := toolResultMessage(call, toolResult)
+	resultDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolResult, ToolCall: call, Tool: spec, ToolResult: toolResult, Message: message, Session: state.session})
 	if err != nil {
 		result := state.fail(StopPolicyDenied, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, err: err})
 		return &result
 	}
 	if !resultDecision.Allowed {
-		returnResult := state.finish(StopPolicyDenied)
+		returnResult := r.finish(ctx, state, turnID, StopPolicyDenied)
 		return &returnResult
 	}
-	state.session.Messages = append(state.session.Messages, Message{
-		Role:       RoleTool,
-		Content:    toolResult.Content,
-		Name:       toolResult.Name,
-		ToolCallID: toolResult.CallID,
-	})
-	state.toolResult(turnID, spec, call, toolResult)
+	state.session.Messages = append(state.session.Messages, message)
+	state.toolResult(turnID, spec, call, toolResult, message)
 	return nil
+}
+
+func toolResultMessage(call ToolCall, result ToolResult) Message {
+	if result.CallID == "" {
+		result.CallID = call.ID
+	}
+	if result.Name == "" {
+		result.Name = call.Name
+	}
+	return Message{
+		Role:       RoleTool,
+		Content:    result.Content,
+		Name:       result.Name,
+		ToolCallID: result.CallID,
+		Blocks:     []Block{{ID: "tool-result-" + result.CallID, Kind: BlockToolResult, ToolResult: result}},
+	}
+}
+
+func textMessage(role Role, text string) Message {
+	return Message{Role: role, Content: text, Blocks: []Block{{Kind: BlockText, Text: text}}}
 }
 
 type retryOperation[T any] struct {
@@ -424,12 +537,21 @@ func (r *runner) decide(ctx context.Context, state *runState, turnID string, dec
 	return policyDecision, err
 }
 
+func (r *runner) finish(ctx context.Context, state *runState, turnID string, reason StopReason) RunResult {
+	_, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionStop, Request: state.request, Session: state.session, StopReason: reason, Events: append([]Event(nil), state.events...)})
+	if err != nil {
+		return state.fail(StopPolicyDenied, eventPayload{turnID: turnID, err: err})
+	}
+	return state.finish(reason)
+}
+
 type runState struct {
 	runID   string
 	ctx     context.Context
 	request RunRequest
 	session Session
 	text    string
+	usage   Usage
 	seq     int64
 	emit    func(Event)
 	sinks   []EventSink
@@ -438,12 +560,17 @@ type runState struct {
 
 type eventPayload struct {
 	turnID         string
+	messageID      string
+	blockID        string
+	blockKind      BlockKind
 	toolCallID     string
 	text           string
 	message        Message
 	tool           ToolSpec
 	toolCall       ToolCall
+	toolCallDelta  ToolCallDelta
 	toolResult     ToolResult
+	usage          Usage
 	decision       Decision
 	policyDecision PolicyDecision
 	retry          RetryEvent
@@ -451,16 +578,16 @@ type eventPayload struct {
 	err            error
 }
 
-func (s *runState) textDelta(turnID string, message Message) {
-	s.send(EventTextDelta, eventPayload{turnID: turnID, text: message.Content, message: message})
-}
-
 func (s *runState) toolCall(turnID string, tool ToolSpec, call ToolCall) {
 	s.send(EventToolCall, eventPayload{turnID: turnID, toolCallID: call.ID, tool: tool, toolCall: call})
 }
 
-func (s *runState) toolResult(turnID string, tool ToolSpec, call ToolCall, result ToolResult) {
-	s.send(EventToolResult, eventPayload{turnID: turnID, toolCallID: call.ID, tool: tool, toolResult: result})
+func (s *runState) toolResult(turnID string, tool ToolSpec, call ToolCall, result ToolResult, message Message) {
+	blockID := ""
+	if len(message.Blocks) > 0 {
+		blockID = message.Blocks[0].ID
+	}
+	s.send(EventToolResult, eventPayload{turnID: turnID, blockID: blockID, blockKind: BlockToolResult, toolCallID: call.ID, tool: tool, toolResult: result, message: message})
 }
 
 func (s *runState) policyDecision(turnID string, decision Decision, policyDecision PolicyDecision) {
@@ -475,12 +602,17 @@ func (s *runState) send(kind EventKind, payload eventPayload) {
 	event := Event{
 		Kind:           kind,
 		TurnID:         payload.turnID,
+		MessageID:      payload.messageID,
+		BlockID:        payload.blockID,
+		BlockKind:      payload.blockKind,
 		ToolCallID:     payload.toolCallID,
 		Text:           payload.text,
 		Message:        payload.message,
 		Tool:           cloneToolSpec(payload.tool),
 		ToolCall:       payload.toolCall,
+		ToolCallDelta:  payload.toolCallDelta,
 		ToolResult:     payload.toolResult,
+		Usage:          payload.usage,
 		Decision:       cloneDecision(payload.decision),
 		PolicyDecision: payload.policyDecision,
 		Retry:          payload.retry,
@@ -493,6 +625,25 @@ func (s *runState) send(kind EventKind, payload eventPayload) {
 	s.events = append(s.events, event)
 	s.emit(event)
 	s.notifySinks(event)
+}
+
+func (s *runState) modelEvent(event Event) {
+	s.send(event.Kind, eventPayload{
+		turnID:        event.TurnID,
+		messageID:     event.MessageID,
+		blockID:       event.BlockID,
+		blockKind:     event.BlockKind,
+		toolCallID:    event.ToolCallID,
+		text:          event.Text,
+		message:       event.Message,
+		tool:          event.Tool,
+		toolCall:      event.ToolCall,
+		toolCallDelta: event.ToolCallDelta,
+		toolResult:    event.ToolResult,
+		usage:         event.Usage,
+		stopReason:    event.StopReason,
+		err:           event.Err,
+	})
 }
 
 func (s *runState) notifySinks(event Event) {
@@ -511,7 +662,18 @@ func (s *runState) fail(reason StopReason, payload eventPayload) RunResult {
 
 func (s *runState) finish(reason StopReason) RunResult {
 	s.send(EventStop, eventPayload{stopReason: reason})
-	return RunResult{Text: s.text, StopReason: reason, Session: s.session, Events: append([]Event(nil), s.events...)}
+	return s.result(reason)
+}
+
+func (s *runState) result(reason StopReason) RunResult {
+	return RunResult{Text: s.text, StopReason: reason, Usage: s.usage, Session: s.session, Events: cloneEvents(s.events)}
+}
+
+func defaultString(value string, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
 }
 
 type allowAllPolicy struct{}
@@ -522,12 +684,80 @@ func (allowAllPolicy) Decide(context.Context, Decision) (PolicyDecision, error) 
 
 func cloneSession(session Session) Session {
 	clone := session
-	clone.Messages = append([]Message(nil), session.Messages...)
+	clone.Messages = cloneMessages(session.Messages)
 	if session.Values != nil {
 		clone.Values = make(map[string]any, len(session.Values))
 		for key, value := range session.Values {
 			clone.Values[key] = value
 		}
+	}
+	return clone
+}
+
+func cloneMessages(messages []Message) []Message {
+	if messages == nil {
+		return nil
+	}
+	clone := make([]Message, len(messages))
+	for i, message := range messages {
+		clone[i] = cloneMessage(message)
+	}
+	return clone
+}
+
+func cloneMessage(message Message) Message {
+	message.Blocks = cloneBlocks(message.Blocks)
+	message.ToolCalls = append([]ToolCall(nil), message.ToolCalls...)
+	return message
+}
+
+func cloneBlocks(blocks []Block) []Block {
+	if blocks == nil {
+		return nil
+	}
+	clone := make([]Block, len(blocks))
+	for i, block := range blocks {
+		block.ToolResult = cloneToolResult(block.ToolResult)
+		clone[i] = block
+	}
+	return clone
+}
+
+func cloneToolResult(result ToolResult) ToolResult {
+	result.JSON = cloneJSONValue(result.JSON)
+	return result
+}
+
+func cloneJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		clone := make(map[string]any, len(typed))
+		for key, value := range typed {
+			clone[key] = cloneJSONValue(value)
+		}
+		return clone
+	case []any:
+		clone := make([]any, len(typed))
+		for i, value := range typed {
+			clone[i] = cloneJSONValue(value)
+		}
+		return clone
+	default:
+		return value
+	}
+}
+
+func cloneEvents(events []Event) []Event {
+	if events == nil {
+		return nil
+	}
+	clone := make([]Event, len(events))
+	for i, event := range events {
+		event.Message = cloneMessage(event.Message)
+		event.Tool = cloneToolSpec(event.Tool)
+		event.ToolResult = cloneToolResult(event.ToolResult)
+		event.Decision = cloneDecision(event.Decision)
+		clone[i] = event
 	}
 	return clone
 }
@@ -582,6 +812,10 @@ func cloneToolSpec(spec ToolSpec) ToolSpec {
 
 func cloneDecision(decision Decision) Decision {
 	decision.Tool = cloneToolSpec(decision.Tool)
+	decision.ToolResult = cloneToolResult(decision.ToolResult)
+	decision.Message = cloneMessage(decision.Message)
 	decision.Retry.Tool = cloneToolSpec(decision.Retry.Tool)
+	decision.Session = cloneSession(decision.Session)
+	decision.Events = cloneEvents(decision.Events)
 	return decision
 }

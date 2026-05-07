@@ -282,35 +282,35 @@ The main caution: do not import Pi's extension/resource/package system into core
 
 Current `go-agent` reality:
 
-| Area            | Current Shape                                                       |
-| --------------- | ------------------------------------------------------------------- |
-| Product center  | Embeddable Go runtime, not CLI/product shell                        |
-| Core primitive  | `Runner` built from `Agent`                                         |
-| Model boundary  | `Model.Turn(context.Context, TurnRequest)`                          |
-| Tool boundary   | `Tool` plus `NewTool` / `NewToolWithSchema`                         |
-| Session model   | Linear `Session` with pluggable `SessionStore`                      |
-| Event model     | Structured `Event` stream plus `EventSink`                          |
-| Policy model    | Host-owned `Policy` decisions for run start, tool call, tool result |
-| Roadmap posture | CLI, MCP, sub-agent orchestration deferred/outside core             |
+| Area            | Current Shape                                                      |
+| --------------- | ------------------------------------------------------------------ |
+| Product center  | Embeddable Go runtime, not CLI/product shell                       |
+| Core primitive  | `Runner` built from `Agent`                                        |
+| Model boundary  | `Model.Stream(context.Context, TurnRequest, func(Event)) error`    |
+| Tool boundary   | `Tool` plus `NewTool` / `NewToolWithSchema`                        |
+| Session model   | Linear `Session` with pluggable `SessionStore`                     |
+| Event model     | Canonical structured `Event` stream plus `EventSink`               |
+| Policy model    | Host-owned `Policy` decisions for run, tool, retry, and stop facts |
+| Roadmap posture | CLI, MCP, sub-agent orchestration deferred/outside core            |
 
 That matches `.agentera/vision.yaml`: library first, CLI second, platform never by default.
 
 ### Applicability Matrix
 
-| Pi Concept                       |           Fit For `go-agent` | Recommendation                                                                                                                                                                           |
-| -------------------------------- | ---------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mode-neutral runtime core        |                         High | Keep `Runner` as the single semantic core. CLI/service/worker/UI/RPC should consume `Run`/`Stream`, not fork runtime logic.                                                              |
-| SDK-first exports                |                         High | `go-agent` already is the SDK. Prioritize ergonomic constructor/options next, because README examples still show a future `goagent.New` facade while implementation exposes `NewRunner`. |
-| Event stream as integration seam |                         High | Lean harder into `Event` as the bridge for logs, UIs, replay, tests, CLI, and observability. This is the Go equivalent of Pi's shared session events.                                    |
-| Definition-first tools           |                  Medium-High | Keep `Tool` small. Avoid Pi-style TUI render hooks in core. If needed, add optional metadata through separate interfaces/packages, not the root `Tool` contract.                         |
-| Pluggable session persistence    |                         High | Current `SessionStore` is right. Pi's tree model is worth studying for future file-backed/replay stores, but not as a core requirement yet.                                              |
-| Branchable JSONL sessions        |                       Medium | Useful for future local CLI/debug/replay package. Do not force branch trees into root `Session` until a concrete consumer needs forks/navigation.                                        |
-| Compaction summaries             |                       Medium | Relevant when long-running sessions become real. Best modeled as host-owned session metadata or optional middleware/store behavior, not hidden core behavior.                            |
-| Resource loader                  |                   Low-Medium | Do not copy Pi's resource loader into core. In Go, resource composition should be packages/config supplied by host apps. A future CLI may have its own loader.                           |
-| Extension event bus              |                       Medium | `EventSink` and `Policy` cover the production-safe subset. Avoid a broad mutation-capable `ExtensionAPI` in core. Add narrower hooks only from real use cases.                           |
-| Model registry                   | Low for core, Medium for CLI | Core should stay provider-interface based. A future optional CLI can have a registry; root package should not become a marketplace.                                                      |
-| Package marketplace              |                          Low | Conflicts with ordinary Go packages over ecosystem ceremony. Use modules/adapters/examples instead.                                                                                      |
-| Interactive TUI hooks            |                          Low | Explicit non-goal for core. A TUI can consume events later if needed.                                                                                                                    |
+| Pi Concept                       |           Fit For `go-agent` | Recommendation                                                                                                                                                   |
+| -------------------------------- | ---------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mode-neutral runtime core        |                         High | Keep `Runner` as the single semantic core. CLI/service/worker/UI/RPC should consume `Run`/`Stream`, not fork runtime logic.                                      |
+| SDK-first exports                |                         High | `go-agent` already is the SDK. Keep `New` as the low-ceremony facade while preserving explicit `Agent` and `NewRunner` wiring for hosts that want it.            |
+| Event stream as integration seam |                         High | Lean harder into `Event` as the bridge for logs, UIs, replay, tests, CLI, and observability. This is the Go equivalent of Pi's shared session events.            |
+| Definition-first tools           |                  Medium-High | Keep `Tool` small. Avoid Pi-style TUI render hooks in core. If needed, add optional metadata through separate interfaces/packages, not the root `Tool` contract. |
+| Pluggable session persistence    |                         High | Current `SessionStore` is right. Pi's tree model is worth studying for future file-backed/replay stores, but not as a core requirement yet.                      |
+| Branchable JSONL sessions        |                       Medium | Useful for future local CLI/debug/replay package. Do not force branch trees into root `Session` until a concrete consumer needs forks/navigation.                |
+| Compaction summaries             |                       Medium | Relevant when long-running sessions become real. Best modeled as host-owned session metadata or optional middleware/store behavior, not hidden core behavior.    |
+| Resource loader                  |                   Low-Medium | Do not copy Pi's resource loader into core. In Go, resource composition should be packages/config supplied by host apps. A future CLI may have its own loader.   |
+| Extension event bus              |                       Medium | `EventSink` and `Policy` cover the production-safe subset. Avoid a broad mutation-capable `ExtensionAPI` in core. Add narrower hooks only from real use cases.   |
+| Model registry                   | Low for core, Medium for CLI | Core should stay provider-interface based. A future optional CLI can have a registry; root package should not become a marketplace.                              |
+| Package marketplace              |                          Low | Conflicts with ordinary Go packages over ecosystem ceremony. Use modules/adapters/examples instead.                                                              |
+| Interactive TUI hooks            |                          Low | Explicit non-goal for core. A TUI can consume events later if needed.                                                                                            |
 
 ### Primitive Mapping
 
@@ -327,13 +327,13 @@ That matches `.agentera/vision.yaml`: library first, CLI second, platform never 
 
 ### What To Borrow
 
-| Pattern                                | Application In `go-agent`                                                                                                                |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| One runtime path for all consumers     | `examples/minimal`, `examples/service`, `examples/worker`, and `examples/cli` are the right proof: different host shapes, same `Runner`. |
-| Events as the stable external protocol | A future CLI, debug UI, JSON mode, or RPC bridge should be a thin renderer over `Stream`, not a separate runtime.                        |
-| Optional session-store packages        | A future `session/jsonl` or `session/file` package could explore Pi-like append-only replay without changing `SessionStore`.             |
-| Strong host-owned policy               | `go-agent`'s `Policy` is more production-aligned for Go services than permission UI hooks.                                               |
-| API promise alignment                  | The immediate gap is ergonomics: README uses `goagent.New(...)` and options while current implementation exposes `NewRunner(Agent)`.     |
+| Pattern                                | Application In `go-agent`                                                                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| One runtime path for all consumers     | `examples/minimal`, `examples/service`, `examples/worker`, and `examples/cli` are the right proof: different host shapes, same `Runner`.      |
+| Events as the stable external protocol | A future CLI, debug UI, JSON mode, or RPC bridge should be a thin renderer over `Stream`, not a separate runtime.                             |
+| Optional session-store packages        | A future `session/jsonl` or `session/file` package could explore Pi-like append-only replay without changing `SessionStore`.                  |
+| Strong host-owned policy               | `go-agent`'s `Policy` is more production-aligned for Go services than permission UI hooks.                                                    |
+| API promise alignment                  | Current ergonomics match the README: `goagent.New(...)` and options are the low-ceremony facade over explicit `Agent` and `NewRunner` wiring. |
 
 ### What Not To Borrow
 
@@ -347,7 +347,7 @@ That matches `.agentera/vision.yaml`: library first, CLI second, platform never 
 
 ### Recommended Next Steps
 
-1. Build the ergonomic constructor/options layer promised by the README: `New`, `WithModel`, `WithTool`, `WithPolicy`, `WithSessionStore`, `WithEventSink`.
+1. Keep `New`/options as a thin facade over `Agent` and `NewRunner`; do not let it grow provider credential discovery, settings, prompt/resource loading, or product lifecycle behavior.
 2. Keep the optional developer CLI deferred, but define its rule now: it must be a consumer of `Runner.Stream`, not a second runtime.
 3. Consider a file-backed `SessionStore` package later, possibly append-only JSONL, but do not add branch trees to root yet.
 4. Expand event coverage only where production questions require it, such as tool duration, model latency, retry attempts, token usage, or provider metadata.

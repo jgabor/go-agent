@@ -32,6 +32,7 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Add policy-governed tool retry for retry-safe tools.
 - [x] Complete runtime ergonomics plan freshness checkpoint.
 - [x] Complete runtime depth and test locality plan freshness checkpoint.
+- [x] Complete streaming-primary runtime contract freshness checkpoint.
 
 ## Now
 

@@ -67,7 +67,7 @@ func TestRunnerRetryPolicyDenialStopsExplicitly(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "try"})
-	if err != nil {
+	if !errors.Is(err, modelErr) {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestRunnerRetryPolicyConstraintBoundsAttempts(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "try"})
-	if err != nil {
+	if !errors.Is(err, modelErr) {
 		t.Fatal(err)
 	}
 
@@ -468,7 +468,7 @@ func TestRetryCancellationDuringDelayIsReconstructable(t *testing.T) {
 	}
 
 	result, err := runner.Run(ctx, goagent.RunRequest{Input: "try"})
-	if err != nil {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 
@@ -565,6 +565,15 @@ func (m *flakyModel) Turn(context.Context, goagent.TurnRequest) (goagent.TurnRes
 	turn := m.turns[0]
 	m.turns = m.turns[1:]
 	return turn, nil
+}
+
+func (m *flakyModel) Stream(ctx context.Context, request goagent.TurnRequest, emit func(goagent.Event)) error {
+	turn, err := m.Turn(ctx, request)
+	if err != nil {
+		return err
+	}
+	goagent.StreamTurnResult(turn, emit)
+	return nil
 }
 
 type flakySessionStore struct {

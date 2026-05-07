@@ -75,7 +75,7 @@ func TestNewAppliesSafeRuntimeDefaults(t *testing.T) {
 	if len(request.Tools) != 0 {
 		t.Fatalf("default tools = %+v, want none", request.Tools)
 	}
-	if !slices.Equal(eventKinds(result.Events), []goagent.EventKind{goagent.EventTextDelta, goagent.EventStop}) {
+	if !slices.Equal(eventKinds(result.Events), textTurnEvents()) {
 		t.Fatalf("default events = %+v", eventKinds(result.Events))
 	}
 }

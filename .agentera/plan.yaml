@@ -2,177 +2,281 @@ header:
   level: full
   created: 2026-05-07
   status: completed
+  approved: 2026-05-07
   reviewed: 2026-05-07
-  critic_issues: "9 found, 9 addressed, 0 dismissed"
+  critic_issues: "20 found, 20 addressed, 0 dismissed"
   revised: >-
-    Split the test migration and tool work into smaller cycles, removed the
-    dependency bottleneck, made compatibility baselines explicit, named retry
-    target categories, and clarified event sink behavior as an existing
-    observational contract.
-  completed: 2026-05-07
-  title: "Plan: Runtime Depth And Test Locality"
+    Split grammar from assembly/runtime migration, made error and terminal-event
+    semantics explicit, moved provider proof earlier, constrained generic options
+    and usage metadata, separated transcript/tool/session/policy risks, and added
+    acceptance for API break lists, deterministic replay, simple-model ergonomics,
+    and artifact freshness.
+  title: "Plan: Streaming-Primary Runtime Contract"
 what: >-
-  Deepen the highest-impact shallow runtime modules from the architecture
-  review: the test surface around the real Runner, policy-visible retry,
-  runtime history and event construction, and tool authoring/execution. Public
-  runtime behavior should remain compatible while repeated rules gain better
-  locality behind existing seams.
+  Redesign go-agent's public model, event, message, result, and tool-result
+  contracts so provider streaming is the primary runtime seam. Event becomes the
+  authoritative run stream, Message becomes block-based for transcript content,
+  completion results are assembled from streaming, and generic options, usage,
+  and JSON-capable tool results are represented without importing Lira product
+  policy.
 why: >-
-  go-agent now has the core product shape: Agent, Runner, Tool, Session, Event,
-  Policy, providers, retries, sessions, observability, and examples. Recent
-  slices concentrated behavior in Runner and left duplicate retry, event, and
-  test-runtime rules. This plan improves locality for correctness bugs,
-  preserves leverage from existing public seams, and makes the codebase easier
-  for humans and AI agents to navigate before new runtime surfaces are added.
+  Lira integration exposed that the current turn-only Model and whole-message
+  EventTextDelta cannot faithfully represent provider deltas, usage, tool-call
+  streaming, or structured tool results. Pi's lower-level agent and ai packages
+  show a coherent alternative: streaming is the primitive, completion is a
+  projection, and event/message grammar is the stable integration seam. The
+  project is young enough to break early, and go-agent's vision requires every
+  turn, tool call, retry, and stop reason to be reconstructable without
+  guesswork.
 constraints: >-
-  Preserve the library-first core and existing public Agent, Runner, Tool,
-  Session, Event, and Policy vocabulary. Do not add product assembly, provider
-  registries, auth/settings/prompt/resource loading, UI, CLI shell behavior,
-  MCP, sub-agent orchestration, or workflow DSL features. Keep retry
-  policy-visible and reconstructable through structured events. Retry targets in
-  scope are model turn failures, session-store load failures, and retry-safe tool
-  execution failures. Unknown tools, policy denial, cancellation, step limits,
-  and event sink failures remain terminal or observational rather than retry
-  targets. Keep ToolDefinition runtime-focused and avoid provider-specific
-  changes.
+  Keep the core library-first and host-owned. Do not add provider registry,
+  credential discovery, auth assembly, settings, prompts, resources, product
+  CLI/TUI behavior, MCP, sub-agent orchestration, workflow DSL, hosted platform,
+  model marketplace, background shell abstraction, Lira provider policy, workdir
+  behavior, workflow recovery categories, or pricing. Preserve plain Go public
+  vocabulary around Agent, Runner, Tool, Session, Event, and Policy. Completion
+  APIs must remain ergonomic as projections over streaming. Stream failures
+  remain Go errors and also produce terminal error/stop events once a turn has
+  been accepted.
 scope:
   included:
-    - Baseline characterization for current public runtime behavior.
-    - Real Runner scenario tests that replace the test-only scripted runtime.
-    - Retry behavior depth for model, session-store load, and retry-safe tool failures.
-    - Runtime history depth for event ordering, correlation, sink observation, failure, stop, and result snapshots.
-    - Tool authoring, metadata propagation, execution constraints, and retry-safety locality.
-    - Documentation/backlog freshness where public behavior or repository guidance changes.
+    - Public contract break list for model, event, message, result, usage, options, and tool-result surfaces.
+    - Canonical event grammar with ordering, correlation, delta aggregation, terminal, usage, stop, and error semantics.
+    - Block-based transcript messages for text, tool calls, and tool results.
+    - Deterministic stream assembler/reducer that reconstructs messages, usage, stop reason, and final results.
+    - Streaming-primary model execution with simple-model adapter ergonomics.
+    - Generic turn options, usage metadata, and JSON-compatible tool results.
+    - Existing OpenAI-compatible provider proof against the new grammar.
+    - Tests, package docs, examples, README roadmap, and Agentera state freshness.
   excluded:
-    - Public API redesign for Agent, Runner, Tool, Session, Event, or Policy.
-    - New provider adapters or provider marketplace behavior.
-    - Session store architecture beyond compatibility with current session-store load retry.
-    - Product shell concerns including auth assembly, settings, prompts, resources, UI, CLI lifecycle, MCP, sub-agent orchestration, or workflow DSLs.
+    - Lira-side adapters, Lira provider deletion, or Lira integration test ownership.
+    - Provider registry, provider selection, aliases, auth, settings, prompt/resource loading, and CLI subprocess providers.
+    - Cost accounting, pricing policy, model marketplace metadata, and workflow budget/recovery policy.
+    - Broad provider coverage beyond the existing OpenAI-compatible proof adapter.
+    - MCP, sub-agent orchestration, workflow DSL, hosted platform, UI, TUI, or product shell behavior.
   deferred:
-    - OpenAI provider adapter internal deepening.
-    - Session lifecycle deepening.
-    - File-backed or database-backed session adapters.
+    - Anthropic provider package.
+    - OpenAI Responses provider package.
+    - Lira adapter implementation and Lira parity tests.
+    - File-backed or database-backed session/replay packages.
+    - Post-break event versioning, unless implementation discovers persisted event compatibility pressure.
 design: >-
-  Characterize current public behavior first, then move repeated runtime rules
-  toward a single maintainable locality while keeping existing seams stable.
-  Tests should use real adapters at real seams: Model, Tool, Policy,
-  SessionStore, EventSink, Runner, Run, and Stream. When existing behavior is
-  contradictory across surfaces, pause to record the surprise and choose the
-  public contract before changing behavior.
+  Specify the canonical event and block-message grammar first, then prove it with
+  a narrow provider spike before migrating the runtime. Build a deterministic
+  stream assembler as the bridge between streaming events and final results.
+  Provider-specific wire details normalize before reaching Event, while bounded
+  diagnostics can preserve request IDs, provider/package identifiers, raw stop
+  reasons, and non-secret opaque metadata. Completion callers use final results
+  assembled from the same stream consumed by Event sinks and Runner.Stream.
+  Simple fake, local, and test models remain concise through an adapter that
+  converts a final response into the canonical stream. No backward session
+  migration is required unless a concrete persisted-session consumer is found;
+  otherwise old session shapes may be intentionally rejected during the break.
 tasks:
   - number: 1
-    name: Characterize runtime compatibility baseline
+    name: Define the breaking contract boundary
     depends_on: []
-    status: complete
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Added docs/streaming-primary-contract-boundary.md after reviewing current
+      Run, Stream, Model, Message, ToolResult, provider, session, event, docs,
+      and examples. The document lists intentional public breaks by changed
+      type, field, method, event name, and semantic behavior; keeps registry,
+      auth, settings, prompts, resources, CLI shell behavior, MCP, sub-agents,
+      workflow DSL, workdir behavior, pricing, and Lira policy outside core;
+      classifies old session/event shapes as migrated, rejected, or unsupported;
+      and records that later compile failures against the old API are expected
+      consequences of named breaks.
     acceptance:
-      - GIVEN existing public behavior is reviewed WHEN baseline tests are selected THEN Run, Stream, retry, tools, policy, sessions, and event sinks each have regression coverage or an explicit documented gap.
-      - GIVEN current retry behavior is characterized WHEN targets are listed THEN model turn, session-store load, retry-safe tool execution, unsafe tool block, policy denial, cancellation, and step-limit behavior are each classified.
-      - GIVEN event behavior is characterized WHEN sinks are reviewed THEN event sinks are documented or tested as observational adapters that do not control runtime progress.
-      - GIVEN a current behavior appears inconsistent WHEN the baseline is recorded THEN the inconsistency is logged as a surprise before any behavior change.
-    baseline:
-      coverage:
-        run: TestRunnerStopsOnErrorsPolicyStepLimitAndCancellation and TestRuntimeBaselineClassifiesTerminalNonRetryBehavior cover real Runner stop behavior.
-        stream: TestStreamNormalCompletion, TestStreamStopsOnError, TestStreamEventSequenceIsMonotonic, and TestStreamAndRunProduceSameEventKinds cover Stream behavior and Run/Stream event parity.
-        retry: TestRuntimeBaselineClassifiesRetryTargets, TestRuntimeBaselineClassifiesTerminalNonRetryBehavior, TestRuntimeBaselineSessionLoadRetryExhaustionReturnsErrorAndEvents, and retry_test.go cover retry targets, outcomes, policy visibility, and terminal non-targets.
-        tools: TestRunnerExecutesToolAndFeedsResultBackToModel, TestRunnerExposesAdvancedToolDefinitionMetadata, tool_test.go, and retry-safe/unsafe tool retry tests cover tool construction, metadata, execution, and retry safety.
-        policy: TestRunnerPolicyCanConstrainToolCallInput, TestRunnerPolicyCanConstrainStepLimit, TestRunnerPolicyCanValidateToolResult, retry policy tests, and terminal policy-denial baseline cover policy hooks.
-        sessions: session_test.go and session-store runtime retry tests cover session load, save, resume, copies, store errors, and load retry.
-        event_sinks: observability_test.go covers nil sink rejection, Run and Stream observation, context propagation, and panic isolation.
-      retry_classification:
-        model_turn: retry target; retry emits RetryTargetModel and can succeed, be denied, be constrained, be canceled, or exhaust.
-        session_store_load: retry target; retry emits RetryTargetRuntime; if exhausted, Run currently returns both a StopRetryExhausted result snapshot and the store error.
-        retry_safe_tool_execution: retry target only when ToolSpec.Safety.Retryable is true; retry emits RetryTargetTool and policy-visible tool context.
-        unsafe_tool_block: terminal/non-retried execution; emits failed then blocked retry events with RetryReasonToolRetryBlocked and StopToolError, without DecisionRetry.
-        policy_denial: terminal/non-retry target; retry-enabled tool-call policy denial stops with StopPolicyDenied and no retry events.
-        cancellation: terminal/non-retry target before model work in the baseline cancellation case; no retry events.
-        step_limit: terminal/non-retry target; retry-enabled step limit stops with StopStepLimit and no retry events.
-      event_sink_contract: Event sinks are observational adapters. They receive the same event order as Run/Stream collection, cannot return control decisions, and panics are recovered so runtime progress and results continue.
-      artifact_provenance: .agentera/archive/plan-2026-05-06-runtime-ergonomics-and-tooling.yaml pre-existed Task 1 from the immediately preceding planera step, was not created or modified by the Task 1 implementation, and remains intentionally untracked.
-      documented_gaps: No explicit gap remains for Task 1 acceptance; deeper locality and replacement of the scripted runtime are intentionally left to Tasks 2-7.
+      - GIVEN current public Run, Stream, Model, Message, ToolResult, provider, session, and event behavior is reviewed WHEN the target contract is declared THEN each intentional public break is listed by changed type, field, method, event name, or semantic behavior.
+      - GIVEN the target contract is declared WHEN non-goals are checked THEN registry, auth, settings, prompts, resources, CLI shell behavior, MCP, sub-agents, workflow DSL, workdir behavior, pricing, and Lira policy remain outside core.
+      - GIVEN existing session or event persistence is considered WHEN the break list is recorded THEN old shapes are explicitly classified as migrated, rejected, or unsupported because no concrete compatibility owner exists.
+      - GIVEN docs and examples are reviewed WHEN Task 1 completes THEN any future compile failures are expected consequences of named breaks rather than accidental drift.
   - number: 2
-    name: Replace scripted runtime with real Runner scenarios
+    name: Specify event and block-message grammar
     depends_on: [1]
-    status: complete
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Added docs/streaming-primary-event-grammar.md as a specification-only
+      grammar for block-based messages and canonical streaming events. The
+      grammar covers text, tool-call, and tool-result blocks; response start,
+      block delta/end, final message, tool-call-ready, tool-result, usage, stop,
+      and error events; deterministic terminal ordering where terminal error can
+      occur only before final stop and stop admits no following events; streamed
+      partial tool-call names/arguments, call IDs, concurrent calls, malformed
+      and incomplete streams, and finalization before execution; generic
+      token/cache/request usage metadata; and bounded generic options while
+      excluding registry, auth, settings, prompts/resources, CLI shell behavior,
+      MCP, sub-agents, workflow DSL, workdir behavior, pricing, marketplace
+      metadata, budget policy, and Lira policy from core.
     acceptance:
-      - GIVEN runtime behavior scenarios exist WHEN tests execute THEN they exercise the real Runner interface rather than a parallel runtime implementation.
-      - GIVEN event ordering and correlation are asserted WHEN Run or Stream completes THEN the assertions apply to events produced by production runtime behavior.
-      - GIVEN model, tool, policy, cancellation, and step-limit scenarios are covered WHEN the tests pass THEN no simplified test-only agent loop remains as a source of false confidence.
-      - GIVEN test helpers remain WHEN the suite is reviewed THEN they are adapters at real seams, not duplicate runtime implementations.
-    completion:
-      evidence: runtime_behavior_test.go now constructs production Runner instances with real Agent, Model, Tool, Policy, Run, and Stream seams for normal completion, tool dispatch, tool error, model error, cancellation, real run-start policy denial, and step-limit scenarios.
-      removed: The test-only scriptedRuntime, scriptedModel, scriptedTool, scriptedTurn, and duplicate helper functions for model turns, tool execution, policy dispatch, step limits, stop handling, and event sequencing were removed.
-      verification: Focused runtime behavior tests passed with go test ./... -run 'TestRuntimeBehaviorSpecification|TestRuntimeBehaviorStreamUsesRunnerEvents'. Full gate recorded in progress for the implementation cycle.
+      - GIVEN transcript content is represented WHEN messages are inspected THEN text, tool-call, and tool-result blocks can be represented without provider-specific parsing.
+      - GIVEN a streaming assistant response emits content WHEN events are inspected THEN start, delta, end, final message, usage, stop, and error semantics have non-contradictory ordering rules.
+      - GIVEN tool calls stream incrementally WHEN events are inspected THEN partial tool-call names, argument deltas, call IDs, multiple concurrent calls, malformed streams, incomplete streams, and finalization before execution are covered by the grammar.
+      - GIVEN usage metadata is represented WHEN fields are reviewed THEN token/cache/request metadata is allowed while cost, pricing, budget policy, marketplace metadata, and Lira cost policy are excluded.
+      - GIVEN generic options are represented WHEN fields are reviewed THEN max output tokens, temperature, reasoning effort, stop sequences, response format, and bounded host-supplied provider extensions are allowed while auth, registry, provider selection, persisted settings, pricing, workdir, and Lira policy are excluded.
   - number: 3
-    name: Deepen policy-visible retry behavior
-    depends_on: [1]
-    status: complete
+    name: Prove grammar against provider behavior
+    depends_on: [2]
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Added docs/streaming-primary-openai-provider-proof.md and
+      providers/openai/streaming_grammar_proof_test.go as a proof-only harness
+      for the existing OpenAI-compatible provider package. The proof simulates
+      streaming text, streamed tool-call deltas by provider index, usage,
+      finish reasons, pre-acceptance setup failure, and accepted-turn provider
+      failure; normalizes them into the Task 2 canonical events without any
+      provider-specific event field; proves terminal accepted failures emit
+      error, optional usage, then final stop; preserves request ID,
+      provider/package identifiers, raw stop reason, and bounded opaque
+      diagnostics while rejecting credential, registry, marketplace, pricing,
+      and Lira policy metadata; and verifies ChatModel remains limited to
+      Model, APIKey, BaseURL, and HTTPClient rather than adding auth discovery,
+      provider registry/selection, marketplace, workdir, pricing, or product
+      policy behavior. No runtime or provider migration was implemented, and no
+      grammar revision was required.
     acceptance:
-      - GIVEN retry is enabled for model turn, session-store load, or retry-safe tool execution failures WHEN a failure occurs THEN policy-visible retry decisions and events match the baseline.
-      - GIVEN retry is denied, constrained, exhausted, blocked, canceled, or succeeds WHEN events are inspected THEN attempts, targets, outcomes, delays, and stop reasons remain reconstructable.
-      - GIVEN an unknown tool, policy denial, cancellation, step limit, or event sink failure occurs WHEN retry is enabled THEN it is not retried unless a later plan changes the public contract.
-      - GIVEN retry behavior is tested WHEN a retry rule changes THEN the failing test identifies retry semantics rather than unrelated Runner loop behavior.
-    completion:
-      evidence: runner.go now routes model turn retry, session-store load retry, and retry-safe tool execution retry through one internal runRetryOperation state machine while preserving target-specific RetryTarget, RetryReason, ToolCall, ToolSpec, TurnID, EventRetry, EventPolicyDecision, and StopReason payloads. No public API was added or changed.
-      tests: retry_test.go now has focused semantic coverage for model, runtime, and tool retry event reconstruction; cancellation during retry delay; and event sink panic behavior with retry enabled. Existing baseline tests continue to classify unknown tools, policy denial, cancellation, and step limit as non-retry targets.
-      verification: Focused retry gate passed with go test ./... -run 'TestRetry|TestRuntimeBaseline'. Full gates passed with go test ./... and mage check.
+      - GIVEN the existing OpenAI-compatible provider proof runs against the draft grammar WHEN streaming text, tool calls, usage, finish reasons, setup failures, and accepted-turn provider failures are simulated THEN no provider-specific event field is required.
+      - GIVEN provider diagnostics are surfaced WHEN events or errors are inspected THEN request IDs, provider/package identifiers, raw stop reasons, and non-secret opaque metadata can be retained without exposing credentials or product policy.
+      - GIVEN provider behavior cannot be represented WHEN the proof is reviewed THEN the grammar is revised before runtime migration begins.
+      - GIVEN provider package configuration is reviewed WHEN Task 3 completes THEN custom auth discovery, provider registry, provider selection, and model marketplace behavior are still absent from core.
   - number: 4
-    name: Deepen runtime history and event construction
-    depends_on: [1]
-    status: complete
+    name: Build deterministic stream assembly
+    depends_on: [2, 3]
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Added stream_assembly.go with block/message/usage event fields and a
+      deterministic AssembleEvents reducer plus AssembleStream completion-style
+      error projection. The reducer reconstructs final transcript messages,
+      assistant text, finalized tool calls, tool results, usage metadata, stop
+      reasons, and terminal errors from canonical response_start,
+      content_block_start, text_delta, tool_call_delta, content_block_end,
+      message_final, tool_call_ready, tool_result, usage, error, and stop
+      events. It validates replay deterministically by rejecting non-monotonic,
+      malformed, incomplete, post-stop, duplicate-terminal, and contradictory
+      final/stop/error facts with StreamDivergenceError instead of guessing.
+      Terminal error events are accepted only after response_start and must be
+      paired with a terminal stop, matching the grammar's accepted-stream error
+      contract; AssembleStream now deterministically rejects accepted stream
+      errors whose returned Go error does not exactly or explicitly match the
+      terminal EventError.Err through Go error identity semantics. stream_assembly_test.go
+      covers successful reconstruction, replay equality, deterministic
+      divergence, EventError without response_start, response_start plus
+      EventError without EventStop, setup errors, provider errors before accepted
+      content, accepted-turn stream errors, mismatched returned and terminal
+      errors, tool execution errors, policy stops, context cancellation, retry
+      exhaustion, step limits, and contradictory terminal facts. Runtime/provider
+      migration remains deferred to Task 5, and
+      no registry, auth discovery, settings, prompts/resources, CLI shell, MCP,
+      sub-agent, workflow DSL, hosted platform, model marketplace, background
+      shell, workdir, pricing, Lira policy, or broad provider behavior was added.
     acceptance:
-      - GIVEN a run emits text, policy, tool, retry, error, and stop events WHEN events are collected through Run, Stream, or EventSink THEN ordering, RunID, correlation fields, and final result snapshots match the baseline.
-      - GIVEN an event sink panics WHEN a run proceeds THEN runtime progress and collected events remain consistent with the observational sink contract.
-      - GIVEN a run fails or stops for any existing stop reason WHEN events are inspected THEN the terminal error or stop remains reconstructable without caller knowledge of internal control flow.
-      - GIVEN event invariants are tested WHEN tests fail THEN the failure points at runtime history semantics rather than scattered event construction details.
-    completion:
-      evidence: runner.go now routes text, tool call/result, policy decision, retry, error, and stop event construction through runState event helpers and one eventPayload-to-Event conversion point while preserving public Event fields and sink delivery behavior.
-      tests: event_history_test.go adds focused Run, Stream, EventSink, sink-panic, retry/tool/policy/text/stop, final-result-linkage, and terminal-error reconstruction coverage so event construction or correlation regressions fail in runtime-history tests.
-      verification: Focused gate passed with go test ./... -run 'TestRuntimeHistory|TestRuntimeBehavior|TestStream|TestRetry'. Full gates passed with go test ./... and mage check.
+      - GIVEN canonical events are reduced WHEN a run completes THEN final transcript messages, tool calls, tool results, usage metadata, stop reason, and final result text are reconstructed deterministically.
+      - GIVEN stored events are replayed WHEN the same reducer runs THEN the reconstructed result matches the original run or reports a deterministic divergence.
+      - GIVEN setup errors, mid-stream provider errors before accepted content, accepted-turn stream errors, tool execution errors, policy stops, context cancellation, retry exhaustion, and step limits occur WHEN terminal behavior is inspected THEN Go error returns and terminal events follow the declared contract.
+      - GIVEN redundant terminal information exists WHEN events are reduced THEN final, stop, and error events cannot produce contradictory final results.
   - number: 5
-    name: Deepen tool authoring and metadata locality
-    depends_on: [1]
-    status: complete
+    name: Migrate runtime to streaming-primary execution
+    depends_on: [4]
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Migrated the public Model seam from Turn to Stream(ctx, TurnRequest,
+      emit) and changed Runner execution so accepted model turns are consumed as
+      canonical response_start, content_block_start, text_delta,
+      tool_call_delta, content_block_end, message_final, tool_call_ready, usage,
+      error, and stop events. Run, Stream, and event sinks now observe the same
+      runtime-assigned event sequence, and completion results are assembled from
+      those events before session/tool-loop updates. Added ModelFromSimple,
+      SimpleModel, SimpleModelFunc, and StreamTurnResult so tests, examples, and
+      local models can still return final TurnResult values while the adapter
+      emits canonical streams. Setup failures before response_start return Go
+      errors without accepted-turn transcript events; accepted stream failures
+      require terminal error/stop events and return the matching Go error.
+      Updated OpenAI-compatible provider/tests, package docs, README usage,
+      examples, runtime tests, and streaming acceptance tests to compile against
+      the new streaming-primary API only. No registry, auth discovery, settings,
+      prompts/resources, CLI shell, MCP, sub-agents, workflow DSL, hosted
+      platform, model marketplace, background shell abstraction, workdir
+      behavior, pricing, Lira policy, or broad provider coverage was added.
     acceptance:
-      - GIVEN a host defines a simple function tool WHEN it is exposed to model requests, policy decisions, events, and execution THEN existing name, schema, input, output, and error behavior matches the baseline.
-      - GIVEN a host defines a ToolDefinition WHEN metadata is exposed to model requests, policy decisions, events, and retry decisions THEN safety and constraints stay consistent across those surfaces.
-      - GIVEN invalid tool definitions or unsupported function shapes are supplied WHEN construction runs THEN failures still happen before runtime execution with useful errors.
-      - GIVEN public tool types are reviewed WHEN the task completes THEN no UI, marketplace, auth, settings, prompt/resource, MCP, sub-agent, or workflow concerns have entered the root tool surface.
-    completion:
-      evidence: tool.go now stores authored function-tool metadata in one internal ToolSpec, so name, description, schema, safety, and constraints have one local representation for NewTool, NewToolWithSchema, and NewToolFromDefinition. runner.go now builds a registeredTool catalog once in NewRunner and uses cached ToolSpec values for model requests, policy decisions, retry context, and event payloads instead of recomputing metadata during tool calls. The retry fix keeps that locality while deep-cloning ToolSchema values at cached/exposed ToolSpec seams so model-visible schema mutation cannot contaminate policy, event, or later-run metadata.
-      tests: runner_test.go adds TestRunnerUsesRegisteredToolMetadataWithoutRediscovery, which fails if Runner probes optional Metadata during Run rather than using construction-time registration metadata. runner_test.go also adds TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns, which mutates TurnRequest.Tools[0].Schema top-level and nested maps inside the model and proves policy metadata, tool-call/tool-result/policy events, and a later run still see the original schema. tool_test.go adds TestNewToolReportsSchemaDerivationMismatchPrecisely and existing focused tool tests continue to cover simple tools, explicit schemas, ToolDefinition metadata, invalid names, empty descriptions, nil schemas, unsupported function shapes, timeout constraints, max-output constraints, input decoding, and returned errors.
-      verification: Retry-cycle focused gate passed with go test ./... -run 'TestRunnerClonesCachedToolSchemaAcrossModelPolicyEventsAndRuns|TestRunnerUsesRegisteredToolMetadataWithoutRediscovery|TestRunnerExposesAdvancedToolDefinitionMetadata|TestNewTool|TestToolDefinition|TestFunctionTool'. Full gates passed with go test ./... and mage check after gofumpt formatting.
+      - GIVEN a streaming model drives a run WHEN Run, Stream, and event sinks observe it THEN they consume the same canonical event sequence and produce the same assembled final result.
+      - GIVEN a non-streaming fake or local model is used WHEN tests and examples are written THEN a helper or adapter converts the final response into the canonical stream without forcing complex model implementations.
+      - GIVEN model setup fails before a turn is accepted WHEN callers inspect results THEN the error behavior is idiomatic Go and no fake accepted-turn transcript is produced.
+      - GIVEN an accepted stream fails WHEN callers inspect results and events THEN the Go error is returned and terminal error/stop events are emitted for event consumers.
+      - GIVEN package docs and examples compile during migration WHEN public APIs change THEN callers see only the new streaming-primary contract.
   - number: 6
-    name: Deepen tool execution and retry-safety behavior
-    depends_on: [3, 4, 5]
-    status: complete
+    name: Align tools, policy, sessions, and metadata
+    depends_on: [4, 5]
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Aligned tool results, policy facts, session snapshots, and runtime metadata
+      with the canonical block/event grammar. Tool-result messages now carry
+      stable tool-result block IDs and preserve text or JSON-compatible values
+      through EventToolResult, policy DecisionToolResult, reducer projections,
+      RunResult events, and MemorySessionStore snapshots. Explicit policy hooks
+      now receive DecisionStop facts with the stop reason and pre-stop canonical
+      event history, while run, tool-call, tool-result, and retry decisions keep
+      cloned block/session/tool metadata instead of provider-specific payloads.
+      RunResult now exposes latest generic Usage assembled from stream events,
+      sessions save user/tool/assistant block messages in transcript order, and
+      session/event/result snapshots defensively clone block JSON values. Added
+      TestRunnerPreservesBlockJSONToolResultsAcrossPolicyEventsAndSessions and
+      updated event-history/runtime behavior expectations for explicit stop
+      policy inspection. Existing tool safety, constraints, retry eligibility,
+      and metadata-locality tests continue to pass without adding schema
+      registry, MIME/resource loading, MCP blocks, pricing, Lira policy,
+      provider registry, auth discovery, settings, prompts/resources, CLI shell,
+      sub-agents, workflow DSL, hosted platform, model marketplace, background
+      shell abstraction, workdir behavior, or broad provider coverage.
     acceptance:
-      - GIVEN a tool call executes WHEN constraints, input decoding, returned errors, and output limits are exercised THEN behavior matches the baseline.
-      - GIVEN a retry-safe tool fails WHEN retry is considered THEN retry eligibility is derived from the same runtime-visible tool facts used by policy and events.
-      - GIVEN an unsafe tool fails WHEN retry is enabled THEN no repeated tool call occurs and the stop path remains explicit.
-      - GIVEN tool execution behavior is tested WHEN a tool rule changes THEN the failing test identifies tool execution or retry-safety semantics rather than unrelated Runner behavior.
-    completion:
-      evidence: tool_execution.go now owns internal function-tool execution, input decoding, timeout and max-output enforcement, and registeredTool.callWithRetry retry classification. runner.go delegates tool execution retry setup to registeredTool.callWithRetry while preserving runRetryOperation as the single retry state machine and keeping event/policy/session orchestration in Runner.
-      tests: retry_test.go adds TestRunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext, which covers retry-safe input decoding, timeout, and max-output failures through a real Runner and proves retry policy decisions use the same cached ToolSpec safety metadata, ToolCall ID, RetryTargetTool path, error, constrained/exhausted outcomes, and no function invocation for decode failures. Existing retry tests continue to cover safe returned-error retry success, unsafe blocked retry, policy-denied retry, and constrained retry exhaustion.
-      verification: Focused gate passed with go test ./... -run 'Test(FunctionTool|NewTool|ToolDefinition|RunnerClassifiesRetrySafeToolExecutionFailuresWithToolContext|RunnerRetriesSafeToolFailureWithPolicyContextAndEvents|RunnerBlocksUnsafeToolRetryByDefault|RunnerToolRetry|RetrySemanticsExposeTargetAttemptsDelaysAndStops)'. Full gates passed with go test ./... and mage check.
+      - GIVEN a tool returns text or structured JSON-compatible content WHEN the result is added to the transcript THEN block messages, events, policy views, and sessions preserve the same value without schema registry, MIME/resource loading, MCP blocks, pricing, or Lira policy.
+      - GIVEN policy hooks inspect run, tool-call, tool-result, retry, and stop decisions WHEN the new grammar is active THEN they receive stable block/message/event facts rather than provider-specific payloads.
+      - GIVEN sessions load, save, and resume runs WHEN block-based transcripts are present THEN session snapshots preserve transcript order, tool-call IDs, tool-result IDs, usage metadata where applicable, and stop state according to the declared break policy.
+      - GIVEN tool safety, constraints, retry eligibility, and metadata locality are inspected WHEN tool execution succeeds or fails THEN current runtime-focused behavior remains reconstructable through the new event grammar.
   - number: 7
     name: Plan-level freshness checkpoint
-    depends_on: [2, 3, 4, 5, 6]
-    status: complete
+    depends_on: [1, 2, 3, 4, 5, 6]
+    status: completed
+    completed: 2026-05-07
+    evidence: >-
+      Reviewed repository docs and public examples after Tasks 1-6 completed the
+      streaming-primary runtime contract. README roadmap now describes the agent
+      loop as streaming-primary, stream evidence as Runner Stream plus assembly
+      tests, and the OpenAI-compatible provider as implementing Model.Stream
+      without adding implementation-heavy migration detail. AGENTS.md now records
+      the current streaming-primary seam and ModelFromSimple adapter guidance.
+      TODO.md records this plan-level freshness checkpoint. The Lira gap-analysis
+      follow-up now distinguishes closed generic go-agent runtime gaps from
+      still-Lira-owned provider registry, auth, CLI subprocess, workflow, workdir,
+      pricing, and product-policy responsibilities. Package docs, examples, and
+      provider docs were reviewed. A Task 7 inspektera retry corrected the stale
+      historical wording in docs/streaming-primary-openai-provider-proof.md so it
+      now states that the Task 3 proof was pre-migration evidence and that the
+      current providers/openai.ChatModel implements goagent.Model through
+      ChatModel.Stream without adding provider registry, auth discovery, workdir,
+      pricing, or Lira product policy behavior. A second Task 7 inspektera retry
+      corrected docs/pi-coding-agent-breakdown.md so its Pi comparison now says
+      current ergonomics match the README through `goagent.New(...)` options over
+      explicit `Agent`/`NewRunner` wiring, and keeps future guidance focused on
+      streaming-primary consumers rather than rebuilding an already-present
+      facade. Verification passed with Agentera plan/progress/todo checks and
+      `mage check`.
     acceptance:
-      - GIVEN the deepening work completes WHEN repository guidance is reviewed THEN AGENTS.md no longer contradicts the implemented Go runtime state.
-      - GIVEN public behavior is unchanged WHEN README.md, TODO.md, .agentera state, and affected Go package comments are reviewed THEN only necessary freshness updates are made.
-      - GIVEN the full plan completes WHEN local verification runs THEN mage check succeeds or any blocker is recorded.
-      - GIVEN surprises appear during execution WHEN the checkpoint completes THEN they are recorded before handoff or archival.
-    completion:
-      evidence: Reviewed .agentera/plan.yaml, .agentera/progress.yaml, README.md, AGENTS.md, TODO.md, and public Go package comments/docs after Tasks 1-6 passed evaluator review. AGENTS.md no longer describes the repository as pre-implementation or package-empty, TODO.md records this runtime-depth checkpoint as done, and api.go now describes RetryTargetTool as implemented for retry-safe tool calls. README.md roadmap already matched repository reality and remained focused on product/runtime capability status rather than setup bookkeeping.
-      surprises: No new behavior or scope surprise was found during Task 7. The existing Task 1 run-start policy timing surprise remains recorded in plan surprises.
-      verification: mage check passed on 2026-05-07 with package tests, golangci-lint, and govulncheck succeeding.
+      - GIVEN the streaming-primary contract work completes WHEN repository docs are reviewed THEN README roadmap, package docs, examples, provider docs, AGENTS.md guidance, and the Lira gap-analysis follow-up no longer contradict repository reality.
+      - GIVEN README is updated WHEN public semantics change THEN it stays focused on product shape, public usage, and roadmap status rather than implementation-heavy migration details.
+      - GIVEN Agentera state is updated WHEN the plan completes THEN `.agentera/plan.yaml`, `.agentera/progress.yaml` if used, and relevant TODO entries reflect completed work and recorded surprises.
+      - GIVEN local verification runs WHEN the plan completes THEN `mage check` succeeds or blockers are recorded with exact failing gates.
 overall_acceptance:
-  - GIVEN existing public callers use New, Agent/NewRunner, Tool, ToolDefinition, Policy, Event, Run, or Stream WHEN the plan completes THEN observable behavior remains compatible or any intentional change is recorded before implementation proceeds.
-  - GIVEN maintainers inspect retry, event history, or tool behavior WHEN the plan completes THEN the relevant rules have better locality behind existing seams.
-  - GIVEN tests fail after future runtime changes WHEN the plan completes THEN failures point at real runtime seams rather than a duplicate scripted implementation.
-  - GIVEN Agentera state is read after completion WHEN the plan is reviewed THEN task status, surprises, and repository guidance reflect reality.
+  - GIVEN users consume Runner.Stream or event sinks WHEN provider-backed runs stream text, tool calls, tool results, usage, stops, or errors THEN Event is the authoritative reconstructable stream.
+  - GIVEN users call completion-style APIs WHEN runs finish THEN final results are assembled from the same stream rather than from a separate turn-only path.
+  - GIVEN hosts use simple fake, local, or test models WHEN adopting the new API THEN they can remain concise through an adapter or helper.
+  - GIVEN Lira later builds adapters WHEN mapping its stream-first drivers and block messages THEN missing seams are generic go-agent runtime/provider contracts, not Lira product policy features.
+  - GIVEN product boundaries are reviewed WHEN the plan completes THEN go-agent still does not own provider registry, auth, CLI subprocesses, workflow policy, workdir behavior, pricing, MCP, sub-agent orchestration, or workflow DSL.
 surprises:
-  - date: 2026-05-07
-    task: 1
-    note: The legacy TestRuntimeBehaviorSpecification scripted runtime models denyAllPolicy as a tool-call denial after a model turn, but the real Runner consults explicit policy at DecisionRunStart and stops before model work. This was recorded as a baseline surprise; no runtime behavior was changed.
+  - Task 7 found the Lira gap analysis still described several pre-migration facts as current reality: Model.Turn as the model seam, string-only messages/tool results, missing generic usage, and a non-streaming model boundary. The conclusion stayed the same, but the current-gap matrix needed a freshness follow-up so Lira-owned policy/provider surfaces did not get confused with already-closed generic runtime seams.

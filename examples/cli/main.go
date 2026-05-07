@@ -83,7 +83,7 @@ func newRunner() (goagent.Runner, error) {
 
 	return goagent.New(
 		goagent.WithInstructions("Answer as a concise command-line weather assistant."),
-		goagent.WithModel(&cliModel{}),
+		goagent.WithModel(goagent.ModelFromSimple(&cliModel{})),
 		goagent.WithTools(weather),
 		goagent.WithSessionStore(goagent.NewMemorySessionStore()),
 	)

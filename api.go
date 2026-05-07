@@ -38,13 +38,14 @@ type RunRequest struct {
 type RunResult struct {
 	Text       string
 	StopReason StopReason
+	Usage      Usage
 	Session    Session
 	Events     []Event
 }
 
-// Model is the provider-facing contract for producing the next model turn.
+// Model is the provider-facing contract for streaming the next model turn.
 type Model interface {
-	Turn(context.Context, TurnRequest) (TurnResult, error)
+	Stream(context.Context, TurnRequest, func(Event)) error
 }
 
 // TurnRequest is the runtime's provider-neutral request for one model turn.
@@ -55,21 +56,62 @@ type TurnRequest struct {
 	Session      Session
 }
 
-// TurnResult is the provider-neutral result of one model turn.
+// SimpleModel is the ergonomic non-streaming model shape for tests and local models.
+type SimpleModel interface {
+	Turn(context.Context, TurnRequest) (TurnResult, error)
+}
+
+// SimpleModelFunc adapts a function to SimpleModel.
+type SimpleModelFunc func(context.Context, TurnRequest) (TurnResult, error)
+
+// Turn calls f(ctx, request).
+func (f SimpleModelFunc) Turn(ctx context.Context, request TurnRequest) (TurnResult, error) {
+	return f(ctx, request)
+}
+
+// ModelFromSimple adapts a non-streaming SimpleModel to the streaming Model contract.
+func ModelFromSimple(model SimpleModel) Model {
+	return simpleModelAdapter{model: model}
+}
+
+// TurnResult is the provider-neutral final result used by SimpleModel adapters.
 type TurnResult struct {
 	Message    Message
 	ToolCalls  []ToolCall
 	StopReason StopReason
+	Usage      Usage
 }
 
 // Message is one transcript entry visible to the model or session store.
 type Message struct {
 	Role       Role
 	Content    string
+	Blocks     []Block
 	Name       string
 	ToolCallID string
 	ToolCalls  []ToolCall
 }
+
+// Block is one ordered unit of transcript content.
+type Block struct {
+	ID         string
+	Kind       BlockKind
+	Text       string
+	ToolCall   ToolCall
+	ToolResult ToolResult
+}
+
+// BlockKind identifies the content carried by a transcript block.
+type BlockKind string
+
+const (
+	// BlockText carries literal transcript text.
+	BlockText BlockKind = "text"
+	// BlockToolCall carries an assistant request to execute a tool.
+	BlockToolCall BlockKind = "tool_call"
+	// BlockToolResult carries a result returned by a tool.
+	BlockToolResult BlockKind = "tool_result"
+)
 
 // Role identifies the source of a transcript message.
 type Role string
@@ -147,6 +189,27 @@ type ToolResult struct {
 	CallID  string
 	Name    string
 	Content string
+	JSON    any
+}
+
+// ToolCallDelta carries one incremental tool-call fragment.
+type ToolCallDelta struct {
+	Index          int
+	NameDelta      string
+	ArgumentsDelta string
+}
+
+// Usage carries generic runtime/provider accounting metadata.
+type Usage struct {
+	InputTokens       int
+	OutputTokens      int
+	TotalTokens       int
+	CachedInputTokens int
+	CacheWriteTokens  int
+	RequestID         string
+	Provider          string
+	Model             string
+	Meta              map[string]any
 }
 
 // Session carries conversation state and host-owned runtime metadata across runs.
@@ -169,12 +232,17 @@ type Event struct {
 	Kind           EventKind
 	RunID          string
 	TurnID         string
+	MessageID      string
+	BlockID        string
+	BlockKind      BlockKind
 	ToolCallID     string
 	Text           string
 	Message        Message
 	Tool           ToolSpec
 	ToolCall       ToolCall
+	ToolCallDelta  ToolCallDelta
 	ToolResult     ToolResult
+	Usage          Usage
 	Decision       Decision
 	PolicyDecision PolicyDecision
 	Retry          RetryEvent
@@ -199,12 +267,26 @@ func (f EventSinkFunc) HandleEvent(ctx context.Context, event Event) {
 type EventKind string
 
 const (
+	// EventResponseStart reports that an assistant response stream was accepted.
+	EventResponseStart EventKind = "response_start"
+	// EventContentBlockStart reports that a streamed assistant content block started.
+	EventContentBlockStart EventKind = "content_block_start"
 	// EventTextDelta reports incremental assistant text.
 	EventTextDelta EventKind = "text_delta"
+	// EventToolCallDelta reports incremental tool-call name or argument bytes.
+	EventToolCallDelta EventKind = "tool_call_delta"
+	// EventContentBlockEnd reports that a streamed assistant content block ended.
+	EventContentBlockEnd EventKind = "content_block_end"
+	// EventMessageFinal reports the complete assistant message assembled for a turn.
+	EventMessageFinal EventKind = "message_final"
+	// EventToolCallReady reports that a finalized tool call is eligible for execution.
+	EventToolCallReady EventKind = "tool_call_ready"
 	// EventToolCall reports that the model requested a tool.
 	EventToolCall EventKind = "tool_call"
 	// EventToolResult reports the result returned by a tool.
 	EventToolResult EventKind = "tool_result"
+	// EventUsage reports generic usage metadata for a provider/runtime interaction.
+	EventUsage EventKind = "usage"
 	// EventPolicyDecision reports the policy outcome for a runtime decision.
 	EventPolicyDecision EventKind = "policy_decision"
 	// EventRetry reports retry consideration, attempts, skips, and terminal retry outcomes.
@@ -260,6 +342,8 @@ const (
 	DecisionToolResult DecisionKind = "tool_result"
 	// DecisionRetry lets policy allow, deny, or constrain a runtime retry before it is attempted.
 	DecisionRetry DecisionKind = "retry"
+	// DecisionStop lets policy inspect the stable stop state before the runtime emits the terminal stop event.
+	DecisionStop DecisionKind = "stop"
 )
 
 // Decision describes an action that policy can allow, deny, or constrain.
@@ -269,8 +353,11 @@ type Decision struct {
 	ToolCall   ToolCall
 	Tool       ToolSpec
 	ToolResult ToolResult
+	Message    Message
 	Retry      RetryContext
 	Session    Session
+	StopReason StopReason
+	Events     []Event
 }
 
 // PolicyDecision is the host policy's answer for a runtime decision.

@@ -3,8 +3,10 @@
 // New is the low-ceremony facade for callers that already have resolved runtime
 // dependencies. It applies runtime-owned defaults only: empty instructions, no
 // tools, allow-all policy, no session persistence, no event sinks, retry
-// disabled, and the runner's default per-run step limit. A Model is required, so
-// construction fails before any run starts when it is missing or invalid.
+// disabled, and the runner's default per-run step limit. A streaming Model is
+// required, so construction fails before any run starts when it is missing or
+// invalid. Tests and local models that produce final responses can use
+// ModelFromSimple to adapt SimpleModel into the canonical stream contract.
 //
 // Product assembly remains outside the core package. goagent does not load
 // provider credentials, settings, prompts, resources, auth policy, UI state, CLI

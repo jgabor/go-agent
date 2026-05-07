@@ -33,6 +33,8 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Complete runtime ergonomics plan freshness checkpoint.
 - [x] Complete runtime depth and test locality plan freshness checkpoint.
 - [x] Complete streaming-primary runtime contract freshness checkpoint.
+- [x] Resolve Task 2 typed-usage blocker.
+- [x] Complete Chat Completions Streaming Fidelity freshness checkpoint.
 
 ## Now
 

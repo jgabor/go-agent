@@ -112,4 +112,57 @@ decisions:
       compatibility patches that become permanent.
     confidence: provisional
     feeds_into: [TODO.md]
+  - number: 3
+    date: 2026-05-07
+    question: How should go-agent represent usage metadata after the Usage.Meta blocker?
+    context: >-
+      The Chat Completions Streaming Fidelity plan blocked because public
+      Usage.Meta remained an arbitrary map while Task 2 required closed request
+      options and diagnostics. Pi was reviewed as a comparison point: its Usage
+      shape is typed, and Pi computes cost from maintained model pricing data in
+      its codebase. go-agent has no model marketplace or pricing catalog and
+      deliberately leaves provider pricing and product accounting to hosts such
+      as Lira.
+    alternatives:
+      - name: '[Keep Usage.Meta]'
+        status: rejected
+        tradeoffs: >-
+          Preserves flexibility for future provider-specific accounting facts,
+          but leaves an arbitrary public map that is hard to verify, easy to
+          misuse as diagnostics, and contradictory to the no-opaque-maps boundary.
+        win_condition: >-
+          Choose this only if go-agent deliberately accepts open-ended usage
+          extension data in core.
+      - name: '[Copy Pi usage and cost shape]'
+        status: rejected
+        tradeoffs: >-
+          Matches Pi's input/output/cache/cost breakdown, but Pi owns a generated
+          model pricing registry and calculates costs from that data. Copying the
+          cost shape would push go-agent toward pricing truth it explicitly does
+          not own.
+        win_condition: >-
+          Choose this only if go-agent adopts a provider/model pricing catalog or
+          model marketplace responsibility.
+      - name: '[Typed token/cache usage only]'
+        status: chosen
+        tradeoffs: >-
+          Removes the arbitrary map and keeps usage as generic runtime/provider
+          accounting: input tokens, output tokens, total tokens, cache read/write
+          tokens, request ID, provider, and model. Hosts can compute cost from
+          these facts using their own pricing policy.
+        win_condition: >-
+          Task 2 can pass with no opaque usage metadata map, no cost fields in
+          core, and Lira still able to compute CostUSD externally.
+    choice: >-
+      Remove Usage.Meta and keep go-agent Usage closed and typed around
+      token/cache/request/provider/model facts. Do not add cost fields to core;
+      hosts such as Lira own pricing catalogs and cost calculation.
+    reasoning: >-
+      Pi shows that cost is not merely provider-reported data: it is calculated
+      from model pricing maintained in the codebase. That is product/provider
+      policy, not generic runtime state. The reusable go-agent seam should emit
+      enough usage facts for hosts to account externally without owning pricing
+      truth itself.
+    confidence: firm
+    feeds_into: [TODO.md]
 archive: []

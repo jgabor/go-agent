@@ -30,6 +30,8 @@ type RunRequest struct {
 	// SessionID resumes a stored session by stable host-provided identifier.
 	SessionID string
 	Session   Session
+	// Options carries provider-neutral model-turn controls for every model call in the run.
+	Options TurnOptions
 	// MaxSteps limits model turns in one run. Zero means the runtime default applies.
 	MaxSteps int
 }
@@ -54,6 +56,14 @@ type TurnRequest struct {
 	Messages     []Message
 	Tools        []ToolSpec
 	Session      Session
+	Options      TurnOptions
+}
+
+// TurnOptions carries provider-neutral controls for one model turn.
+type TurnOptions struct {
+	MaxOutputTokens int
+	Temperature     *float64
+	StopSequences   []string
 }
 
 // SimpleModel is the ergonomic non-streaming model shape for tests and local models.
@@ -76,10 +86,11 @@ func ModelFromSimple(model SimpleModel) Model {
 
 // TurnResult is the provider-neutral final result used by SimpleModel adapters.
 type TurnResult struct {
-	Message    Message
-	ToolCalls  []ToolCall
-	StopReason StopReason
-	Usage      Usage
+	Message     Message
+	ToolCalls   []ToolCall
+	StopReason  StopReason
+	Usage       Usage
+	Diagnostics ProviderDiagnostics
 }
 
 // Message is one transcript entry visible to the model or session store.
@@ -199,7 +210,7 @@ type ToolCallDelta struct {
 	ArgumentsDelta string
 }
 
-// Usage carries generic runtime/provider accounting metadata.
+// Usage carries closed runtime/provider accounting facts.
 type Usage struct {
 	InputTokens       int
 	OutputTokens      int
@@ -209,7 +220,39 @@ type Usage struct {
 	RequestID         string
 	Provider          string
 	Model             string
-	Meta              map[string]any
+}
+
+// ProviderDiagnostics carries bounded non-secret provider metadata.
+type ProviderDiagnostics struct {
+	Provider      string
+	Package       string
+	RequestID     string
+	HTTPStatus    int
+	ErrorType     string
+	ErrorCode     string
+	RawStopReason string
+	Excerpt       string
+}
+
+// ProviderError reports a provider failure with bounded diagnostics.
+type ProviderError struct {
+	Message     string
+	Diagnostics ProviderDiagnostics
+	Err         error
+}
+
+func (e *ProviderError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+func (e *ProviderError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
 }
 
 // Session carries conversation state and host-owned runtime metadata across runs.
@@ -243,6 +286,7 @@ type Event struct {
 	ToolCallDelta  ToolCallDelta
 	ToolResult     ToolResult
 	Usage          Usage
+	Diagnostics    ProviderDiagnostics
 	Decision       Decision
 	PolicyDecision PolicyDecision
 	Retry          RetryEvent
@@ -285,7 +329,7 @@ const (
 	EventToolCall EventKind = "tool_call"
 	// EventToolResult reports the result returned by a tool.
 	EventToolResult EventKind = "tool_result"
-	// EventUsage reports generic usage metadata for a provider/runtime interaction.
+	// EventUsage reports typed usage facts for a provider/runtime interaction.
 	EventUsage EventKind = "usage"
 	// EventPolicyDecision reports the policy outcome for a runtime decision.
 	EventPolicyDecision EventKind = "policy_decision"

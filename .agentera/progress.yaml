@@ -1,4 +1,257 @@
 cycles:
+  - number: 48
+    timestamp: "2026-05-07 18:30"
+    type: docs
+    phase: build
+    what: Completed Task 5 and the Chat Completions Streaming Fidelity plan by refreshing docs, TODO, and Agentera state after provider SSE fidelity passed.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 5 required the repository's public and agent-facing docs to match the implemented OpenAI-compatible Chat Completions SSE adapter without turning README into setup history or expanding product scope.
+    discovered: The remaining stale reality was documentation only. The Lira gap analysis and provider proof documents still described Chat Completions streaming, indexed tool-call accumulation, final usage capture, and reasoning effort as missing or shallow even though Tasks 3-4 had implemented and proved them. README needed only roadmap evidence freshness, not an implementation diary.
+    verified: >-
+      Updated provider-facing docs, README roadmap evidence, AGENTS.md current
+      reality, TODO.md, and this plan state to reflect that
+      providers/openai.ChatModel.Stream now directly parses OpenAI-compatible Chat
+      Completions SSE into canonical text/tool-call/usage/finish/error events,
+      emits provider-side success stops only for completed assistant turns after
+      usage, and leaves tool-call turns unstopped until Runner tool execution. The
+      Lira gap analysis now treats Chat Completions SSE fidelity as closed for the
+      optional OpenAI-compatible adapter while preserving Lira ownership of
+      registry/config/auth/cache, CLI subprocess providers, workdir behavior,
+      pricing/cost policy, workflow policy, Copilot, Zen, and product UX. Local
+      verification passed with Agentera plan/progress/todo checks and `mage
+      check`.
+    next: Active plan is complete; continue with a new plan for any future provider family or Lira adapter work.
+    context:
+      intent: Execute Task 5 from the active Chat Completions Streaming Fidelity plan.
+      constraints: Docs/Agentera freshness only plus minimal doc fixes required by verification; no registry/auth discovery/cache, settings/prompt/resource loading, CLI/TUI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir, pricing/cost, Lira policy, Copilot, Zen, Responses, Anthropic, commit, or push.
+      scope: Provider docs, README roadmap evidence, AGENTS.md current reality, Lira gap-analysis follow-up, TODO, plan/progress evidence, Agentera checks, and mage check.
+  - number: 47
+    timestamp: "2026-05-07 18:24"
+    type: test
+    phase: build
+    what: Completed Task 4 for the Chat Completions Streaming Fidelity plan by proving OpenAI-compatible SSE fidelity, failure behavior, cancellation, and diagnostic boundaries.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 4 required provider-side proof that the Task 3 SSE adapter follows the existing streaming-primary contract across rich chunk shapes and failure paths without adding provider-specific event fields or product-policy metadata.
+    discovered: The main implementation gap exposed by the tests was accepted-stream cancellation: the SSE adapter observed request cancellation only as a provider read failure and mapped it to StopModelError. The smallest contract fix was to pass context into the SSE parser and map context cancellation or deadline causes to StopCanceled while leaving malformed/provider stream failures as StopModelError.
+    verified: >-
+      Added providers/openai tests for text deltas, interleaved indexed tool-call
+      name/argument deltas across multiple tool-call indexes, provider-supplied
+      final usage, finish reasons, raw stop diagnostics, setup failures, provider
+      errors before accepted events, accepted stream failures, malformed chunks,
+      incomplete tool calls, invalid JSON tool arguments, cancellation during an
+      accepted stream, and bounded diagnostics with no credential, auth, prompt,
+      tool payload, pricing/cost, registry/config policy, workdir, Lira, or
+      workflow leakage. providers/openai.ChatModel.Stream now passes context into
+      the SSE adapter and accepted context cancellation/deadline failures emit
+      terminal error plus StopCanceled rather than StopModelError. Focused Task 4
+      provider tests and `go test ./providers/openai` passed before this evidence
+      update. Final verification passed with the focused Task 4 provider test
+      run, `go test ./providers/openai`, `go test ./...`, `mage check`, and
+      Agentera plan/progress checks.
+    next: Task 5 remains pending for docs and final reality checkpoint.
+    context:
+      intent: Execute only Task 4 from the active Chat Completions Streaming Fidelity plan.
+      constraints: Tests/proofs and minimal implementation fixes only; no provider registry, auth discovery/cache, settings/prompt/resource loading, CLI/TUI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing/cost, Lira policy, Copilot, Zen, Responses, Anthropic, commit, or push.
+      scope: providers/openai streaming fidelity/failure tests, minimal cancellation stop-reason fix, Task 4 plan evidence, progress evidence, and requested verification gates.
+  - number: 46
+    timestamp: "2026-05-07 18:19"
+    type: fix
+    phase: build
+    what: Retried Task 3 for the inspektera stop-event blocker by making successful accepted OpenAI Chat Completions SSE text turns emit canonical success stop events.
+    commit: "Uncommitted per task constraint"
+    inspiration: The Task 3 evaluation failed because direct providers/openai.ChatModel.Stream SSE success paths emitted assistant-turn events but no canonical success EventStop, forcing direct provider tests to append stop manually before assembly.
+    discovered: The correct boundary fix is provider-side for completed assistant turns, but not for tool-call turns that require the Runner to continue into tool execution. Usage can arrive after finish_reason in a later SSE chunk, so the success stop must be emitted after provider usage has been observed rather than during message finalization.
+    verified: >-
+      providers/openai.ChatModel.Stream now emits EventStop with StopComplete for
+      accepted successful assistant-turn SSE completions after any provider-supplied
+      usage event. Focused direct provider tests assemble text and usage from the
+      provider-emitted stop instead of appending stop manually, and tool-call tests
+      assert tool-call turns do not emit a premature run stop before tool execution.
+      Accepted failure behavior remains terminal error plus StopModelError, non-SSE
+      responses still fail before response_start, usage absence remains valid,
+      usage presence remains provider-supplied only, and tool-call deltas remain
+      indexed and stable. Verification passed with focused provider tests, `go
+      test ./providers/openai`, `go test ./...`, `mage check`, and Agentera
+      plan/progress checks.
+    next: Task 4's broader failure/cancellation matrix remains pending.
+    context:
+      intent: Retry only Task 3 for the inspektera stop-event blocker.
+      constraints: No Task 4 cancellation/error matrix expansion; no provider registry, auth discovery/cache, settings/prompt/resource loading, pricing/cost, workdir behavior, Lira policy, commit, or push.
+      scope: providers/openai successful SSE stop emission, focused direct provider tests, Task 3 plan evidence, progress evidence, and requested verification gates.
+  - number: 45
+    timestamp: "2026-05-07 18:13"
+    type: feat
+    phase: build
+    what: Implemented Task 3 for the Chat Completions Streaming Fidelity plan by replacing the OpenAI-compatible complete-response adapter path with explicit Chat Completions SSE parsing.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 3 required providers/openai.ChatModel.Stream to consume OpenAI-compatible Chat Completions SSE directly, preserve canonical text/tool-call/usage/finish fidelity, and reject non-SSE responses instead of hiding the condition behind StreamTurnResult.
+    discovered: The existing provider already had the needed typed request options, diagnostics, provider errors, redaction, and canonical event grammar; the main implementation gap was transport fidelity. The later Task 3 retry refined successful completed assistant turns to emit provider-side success stops after provider usage, while accepted stream failures emit terminal error and stop events.
+    verified: >-
+      providers/openai.ChatModel.Stream now sends stream=true requests with
+      Accept=text/event-stream, preserves existing max token, temperature, stop
+      sequence, reasoning effort, response format, and typed stream usage options,
+      and parses SSE data records into canonical response_start,
+      content_block_start, text_delta, tool_call_delta, content_block_end,
+      message_final, tool_call_ready, and usage events. Tool calls are accumulated
+      by provider index with stable call identity across name/argument fragments
+      and finalized before tool execution eligibility. Usage is emitted only when
+      provider chunks supply it, with no token or cost synthesis. 2xx non-SSE
+      responses now return ProviderError before response_start, so complete JSON
+      is not silently adapted as a stream. Focused provider tests cover SSE text,
+      indexed tool-call deltas, usage present/absent, raw finish reason diagnostics,
+      provider diagnostics/redaction, typed options, and no silent fallback. The
+      stale complete-response adapter path was removed after lint identified it as
+      dead code, preserving the no-fallback streaming contract. Verification
+      passed with focused provider tests, `go test ./providers/openai`, `go test
+      ./...`, `mage check`, and Agentera plan/progress checks.
+    next: Task 4's broader failure/cancellation matrix remains pending.
+    context:
+      intent: Execute only Task 3 from the active Chat Completions Streaming Fidelity plan.
+      constraints: No provider registry, auth discovery/cache, settings/prompt/resource loading, CLI/TUI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing/cost, Lira provider policy, Copilot exchange, Zen routing, OpenAI Responses, Anthropic scope, commit, or push.
+      scope: providers/openai Chat Completions SSE request/response parsing, focused provider tests, Task 3 plan evidence, progress evidence, and requested verification gates.
+  - number: 44
+    timestamp: "2026-05-07 18:08"
+    type: fix
+    phase: build
+    what: Completed Task 2 after Decision 3 by removing public Usage.Meta and keeping usage typed.
+    commit: "Uncommitted per task constraint"
+    inspiration: The revised active plan made Decision 3 firm: go-agent Usage must be closed and typed around token/cache/request/provider/model facts, with no arbitrary Meta map and no cost/pricing fields. Task 3 remains out of scope.
+    discovered: The remaining blocker was narrow and real: api.go still exposed Usage.Meta, model_adapter.go treated it as part of Usage emptiness, stream_assembly_test.go used it in an EventUsage fixture, and docs/chat-completions-streaming-fidelity-contract.md still advertised bounded Usage.Meta for cache and request/provider/model details.
+    verified: >-
+      Removed Usage.Meta from api.go, removed it from Usage.empty, updated the
+      stream assembly fixture, and added TestUsageSurfaceIsClosedAndTyped to
+      prove Usage has only typed token/cache/request/provider/model fields and
+      no map, interface, meta, cost, price, currency, budget, marketplace,
+      registry, or policy fields. Updated docs/chat-completions-streaming-fidelity-contract.md,
+      docs/streaming-primary-event-grammar.md, docs/streaming-primary-contract-boundary.md,
+      and docs/lira-provider-replacement-gap-analysis.md to describe typed usage
+      facts instead of generic opaque usage metadata. Existing narrow TurnOptions,
+      typed providers/openai ChatOptions, ProviderDiagnostics, ProviderError, and
+      sanitized provider error excerpts were preserved. Verification passed with
+      focused tests, go test ./..., mage check, and Agentera plan/progress/todo
+      checks.
+    next: Task 3 can implement Chat Completions SSE parsing; do not expand Task 2 scope.
+    context:
+      intent: Complete only Task 2 from the active Chat Completions Streaming Fidelity plan.
+      constraints: No Chat Completions SSE parsing; no provider registry, auth discovery/cache, settings, prompt/resource loading, pricing, workdir behavior, Lira policy, arbitrary pass-through maps, commit, or push.
+      scope: Usage.Meta removal, typed usage tests/docs, Task 2 plan evidence, TODO blocker resolution, focused/full verification.
+  - number: 43
+    timestamp: "2026-05-07 13:11"
+    type: docs
+    phase: retry
+    what: Retried Task 2 a second time for the Chat Completions Streaming Fidelity plan by removing stale opaque metadata from the grammar evidence.
+    commit: "Uncommitted per task constraint"
+    inspiration: The evaluator found that docs/streaming-primary-event-grammar.md still advertised Message.Meta even though current Message has no Meta field, and still described Usage.Meta as opaque diagnostics/replay metadata despite the Task 2 boundary requiring no opaque maps.
+    discovered: Task 2 evidence needed another documentation-only correction. The core grammar should document Message only with current Role, Name, and Blocks fields, keep diagnostics closed to provider/package/request/status/error/raw-stop/excerpt, and exclude arbitrary usage metadata maps or replay payloads from the grammar.
+    verified: >-
+      docs/streaming-primary-event-grammar.md now removes the stale Message.Meta
+      row and no longer advertises Usage.Meta as bounded opaque diagnostics or
+      replay metadata. The Usage section now explicitly excludes arbitrary
+      metadata maps and replay payloads while preserving the allowed generic
+      accounting fields. Task 2 plan evidence now records this second retry.
+      Verification passed with `uv run "$HOME/.agents/agentera/scripts/agentera"
+      plan`, `uv run "$HOME/.agents/agentera/scripts/agentera" progress`, and
+      `mage check`.
+    next: Task 3 SSE parsing remains untouched.
+    context:
+      intent: Resolve only the second evaluator blocker for Task 2.
+      constraints: Documentation and Agentera evidence only; no runtime behavior changes; no Chat Completions SSE parsing; preserve narrow core options, typed providers/openai options, closed diagnostics, no opaque maps, no commit, and no push.
+      scope: Streaming-primary event grammar metadata rows, Task 2 plan evidence, latest progress evidence, Agentera checks, and mage check.
+  - number: 42
+    timestamp: "2026-05-07 13:09"
+    type: fix
+    phase: retry
+    what: Retried Task 2 for the Chat Completions Streaming Fidelity plan by tightening stale option and diagnostics evidence.
+    commit: "Uncommitted per task constraint"
+    inspiration: The evaluator found that the Task 2 implementation was mostly present, but older grammar/proof documents and proof fixtures still described generic provider extension maps and opaque diagnostic metadata, and provider error excerpts needed explicit sensitive-data redaction proof.
+    discovered: Core turn options must remain only MaxOutputTokens, Temperature, and StopSequences. OpenAI-specific reasoning effort, response format, and stream usage inclusion are provider-package typed ChatOptions rather than generic core options or arbitrary maps. Diagnostics must stay closed to provider/package identity, request ID, HTTP status, provider error type/code, raw stop reason, and sanitized bounded excerpts, with no opaque metadata map and no product-owned or sensitive values.
+    verified: >-
+      docs/streaming-primary-event-grammar.md now documents only the narrow core
+      turn options and explicitly moves non-universal OpenAI Chat Completions
+      knobs to bounded typed provider-package options. The same grammar document
+      now defines diagnostics as a closed set and excludes arbitrary maps,
+      opaque provider/host metadata, API keys, auth state, full prompts/messages,
+      unredacted tool arguments, environment values, credential-bearing URLs,
+      pricing, registry/provider-selection policy, workdir behavior, and Lira
+      policy. docs/streaming-primary-openai-provider-proof.md now lists only
+      request ID, provider/package identity, HTTP status, provider error
+      type/code, raw stop reason, and sanitized excerpt as retained diagnostics
+      and rejects opaque diagnostic maps. providers/openai/streaming_grammar_proof_test.go
+      now uses typed diagnostic fields instead of Meta map[string]any.
+      providers/openai/openai.go sanitizes bounded excerpts before assigning
+      ProviderDiagnostics.Excerpt, and providers/openai/openai_test.go proves
+      provider error messages cannot leak API keys, authorization headers,
+      credential-bearing URLs, prompt/message text, tool arguments, or
+      environment values into the excerpt. Focused verification passed with
+      `go test ./providers/openai -run
+      'Test(ChatModelReportsProviderErrors|ChatModelRedactsProviderErrorExcerpts|ChatOptionsSurfaceIsTyped|OpenAICompatible)'`
+      and `go test ./... -run
+      'TestProviderDiagnosticsSurfaceIsBounded|TestProviderErrorCarriesDiagnostics|TestRunnerPassesProviderNeutralTurnOptions'`.
+    next: Run full repository and Agentera gates; Task 3 SSE parsing remains untouched.
+    context:
+      intent: Retry only Task 2 of the active Chat Completions Streaming Fidelity plan.
+      constraints: No Chat Completions SSE parsing; preserve no provider registry, auth discovery/cache, settings, prompt/resource loading, pricing, workdir behavior, Lira policy, arbitrary core pass-through maps, commit, or push.
+      scope: Task 2 docs, OpenAI proof diagnostics fixture, OpenAI provider excerpt sanitization, focused tests, and progress evidence.
+  - number: 41
+    timestamp: "2026-05-07 13:04"
+    type: feat
+    phase: build
+    what: Completed Task 2 for the Chat Completions Streaming Fidelity plan by adding narrow provider-neutral request options, typed OpenAI-compatible options, and bounded diagnostics.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 2 required only the option and diagnostic surfaces needed before Chat Completions SSE parsing, while preserving go-agent's library-first boundary and excluding provider registry, auth discovery, pricing, workdir behavior, Lira policy, and arbitrary untyped provider pass-through.
+    discovered: The smallest correct core surface was TurnOptions on RunRequest and TurnRequest with only MaxOutputTokens, Temperature, and StopSequences, plus ProviderDiagnostics and ProviderError with no maps or product-owned fields. OpenAI-specific reasoning effort, response format, and stream usage inclusion belong in providers/openai.ChatOptions rather than core. Stream usage inclusion is exposed as typed provider-package configuration but is not sent on the current complete-response adapter.
+    verified: >-
+      api.go exposes TurnOptions, RunRequest.Options, TurnRequest.Options,
+      ProviderDiagnostics, ProviderError, Event.Diagnostics, and
+      TurnResult.Diagnostics with only bounded fields. runner.go propagates
+      RunRequest.Options into model turns. model_adapter.go carries final-response
+      diagnostics onto canonical events. providers/openai/openai.go maps generic
+      max output tokens, temperature, and stop sequences into Chat Completions
+      request JSON; exposes typed ChatOptions/ResponseFormat provider-package
+      options for reasoning effort, response format, and future stream usage
+      inclusion; and returns ProviderError
+      diagnostics for non-2xx responses with provider/package identity, request
+      ID, HTTP status, provider error type/code, and bounded excerpt. Tests in
+      api_test.go, providers/openai/openai_test.go, and
+      providers/openai/streaming_grammar_proof_test.go prove option propagation,
+      bounded diagnostics, no diagnostics maps/forbidden product fields, typed
+      OpenAI option surface, request encoding, and provider error diagnostics.
+      Verification passed with `go test ./... -run
+      'TestRunnerPassesProviderNeutralTurnOptions|TestProviderDiagnosticsSurfaceIsBounded|TestProviderErrorCarriesDiagnostics|TestChatModelSendsChatCompletionRequest|TestChatModelReportsProviderErrors|TestChatOptionsSurfaceIsTyped|TestOpenAICompatibleProviderPackageKeepsProductPolicyOutOfCore'`,
+      `go test ./providers/openai`, `go test ./...`, `mage check`, `uv run
+      "$HOME/.agents/agentera/scripts/agentera" plan`, and `uv run
+      "$HOME/.agents/agentera/scripts/agentera" progress`.
+    next: Task 3 can implement Chat Completions SSE parsing using these bounded surfaces; no SSE parsing was started in Task 2.
+    context:
+      intent: Execute only Task 2 of the active Chat Completions Streaming Fidelity plan.
+      constraints: Request options and diagnostics only; no Chat Completions SSE parsing; no provider registry, auth discovery/cache, settings/prompt/resource loading, CLI/TUI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira provider policy, Copilot exchange, Zen routing, OpenAI Responses, Anthropic provider scope, commit, or push.
+      scope: Core TurnOptions and ProviderDiagnostics/ProviderError surfaces, Runner option propagation, typed providers/openai option surface, OpenAI complete-response request/error diagnostics mapping, focused tests, Task 2 plan status, progress log, and verification.
+  - number: 40
+    timestamp: "2026-05-07 12:58"
+    type: docs
+    phase: build
+    what: Completed Task 1 for the Chat Completions Streaming Fidelity plan by locking the OpenAI-compatible Chat Completions SSE fidelity contract.
+    commit: "Uncommitted per task constraint"
+    inspiration: Task 1 required a written fidelity contract before implementation, grounded in the current providers/openai adapter, the canonical Event grammar, and Lira's chat-completions streaming pressure without importing Lira product policy.
+    discovered: The existing Event grammar already covers text deltas, indexed tool-call deltas, message finalization, tool-call readiness, generic usage, terminal errors, and completion assembly. The remaining contract gaps are narrow: bounded request options, bounded provider diagnostics, and typed provider error metadata. Successful model-turn streams should preserve ModelFromSimple-style completion assembly and let the runtime own run-level stop events, while accepted provider stream failures must emit terminal error and stop events.
+    verified: >-
+      Added docs/chat-completions-streaming-fidelity-contract.md with supported
+      Chat Completions SSE chunk shapes, canonical event mapping, setup versus
+      accepted terminal semantics, usage behavior, diagnostics boundaries, exact
+      non-goals, and narrow missing fields. Reviewed providers/openai/openai.go,
+      api.go, model_adapter.go, stream_assembly.go,
+      docs/streaming-primary-event-grammar.md,
+      docs/streaming-primary-openai-provider-proof.md,
+      docs/lira-provider-replacement-gap-analysis.md, and Lira's
+      internal/driver/chatcompletions.go pressure surface. Updated Task 1 plan
+      status and evidence. Verification passed with `go test ./...`, `uv run
+      "$HOME/.agents/agentera/scripts/agentera" plan`, and `uv run
+      "$HOME/.agents/agentera/scripts/agentera" progress`.
+    next: Task 2 can add the narrow request options and diagnostics surfaces; no SSE parsing implementation was started.
+    context:
+      intent: Execute only Task 1 of the active Chat Completions Streaming Fidelity plan.
+      constraints: Contract documentation and Agentera state only; no SSE parser implementation; no provider registry, auth discovery/cache, settings/prompt/resource loading, CLI/TUI shell, MCP, sub-agents, workflow DSL, hosted platform, model marketplace, background shell abstraction, workdir behavior, pricing, Lira provider policy, Copilot exchange, Zen routing, OpenAI Responses, Anthropic provider scope, commit, or push.
+      scope: Chat Completions streaming fidelity contract, Task 1 plan evidence, progress log, Agentera checks, and Go test verification.
   - number: 39
     timestamp: "2026-05-07 08:47"
     type: docs

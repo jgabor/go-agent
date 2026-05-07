@@ -425,22 +425,22 @@ on pushes and pull requests targeting `main`.
 
 This table reflects the repository today.
 
-| Area                    | Intended capability                                      | Current status | Evidence                                     |
-| ----------------------- | -------------------------------------------------------- | -------------- | -------------------------------------------- |
-| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy`  | Started        | Root package contract and `New` facade exist |
-| Agent loop              | Streaming model loop with tool dispatch and stop reasons | Started        | `NewRunner` consumes canonical model streams |
-| Retries                 | Runtime retry policy and retry events                    | Started        | Observable model/runtime/tool retry exists   |
-| Tool schemas            | Go function and advanced tool metadata support           | Started        | Struct inputs and `ToolDefinition` exist     |
-| Streaming               | Structured event stream for runs                         | Started        | Runner Stream and stream assembly tests      |
-| Sessions                | Pluggable session storage                                | Started        | SessionStore and memory store exist          |
-| Providers               | OpenAI-compatible provider adapter                       | Started        | `providers/openai` implements `Model.Stream` |
-| Observability           | Event sink and OpenTelemetry integration                 | Started        | EventSink hooks observe runtime events       |
-| Policy hooks            | Approval, limits, validation, and authorization hooks    | Started        | Run/tool/result decisions in events          |
-| Tests                   | Unit and integration coverage for runtime behavior       | Started        | API and behavior contract tests exist        |
-| Examples                | Minimal app, service, worker, and CLI examples           | Started        | Examples use `New` with local models         |
-| CLI                     | Optional developer CLI around the library                | Deferred       | Library-first direction                      |
-| MCP adapter             | Optional adapter package outside the core                | Won't fix      | Deliberate non-goal for core                 |
-| Sub-agent orchestration | Optional coordination package outside the core           | Won't fix      | Deliberate non-goal for core                 |
+| Area                    | Intended capability                                      | Current status | Evidence                                        |
+| ----------------------- | -------------------------------------------------------- | -------------- | ----------------------------------------------- |
+| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy`  | Started        | Root package contract and `New` facade exist    |
+| Agent loop              | Streaming model loop with tool dispatch and stop reasons | Started        | `NewRunner` consumes canonical model streams    |
+| Retries                 | Runtime retry policy and retry events                    | Started        | Observable model/runtime/tool retry exists      |
+| Tool schemas            | Go function and advanced tool metadata support           | Started        | Struct inputs and `ToolDefinition` exist        |
+| Streaming               | Structured event stream for runs                         | Started        | Runner Stream and stream assembly tests         |
+| Sessions                | Pluggable session storage                                | Started        | SessionStore and memory store exist             |
+| Providers               | OpenAI-compatible provider adapter                       | Started        | `providers/openai` streams Chat Completions SSE |
+| Observability           | Event sink and OpenTelemetry integration                 | Started        | EventSink hooks observe runtime events          |
+| Policy hooks            | Approval, limits, validation, and authorization hooks    | Started        | Run/tool/result decisions in events             |
+| Tests                   | Unit and integration coverage for runtime behavior       | Started        | API and behavior contract tests exist           |
+| Examples                | Minimal app, service, worker, and CLI examples           | Started        | Examples use `New` with local models            |
+| CLI                     | Optional developer CLI around the library                | Deferred       | Library-first direction                         |
+| MCP adapter             | Optional adapter package outside the core                | Won't fix      | Deliberate non-goal for core                    |
+| Sub-agent orchestration | Optional coordination package outside the core           | Won't fix      | Deliberate non-goal for core                    |
 
 ## Philosophy
 

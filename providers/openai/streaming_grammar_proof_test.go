@@ -23,7 +23,7 @@ func TestOpenAICompatibleStreamingProofFitsDraftGrammar(t *testing.T) {
 			steps: []proofWireStep{
 				{RequestID: "req_text", TextDelta: "Bring "},
 				{RequestID: "req_text", TextDelta: "a jacket."},
-				{RequestID: "req_text", Usage: &proofUsage{InputTokens: 9, OutputTokens: 4, TotalTokens: 13}, FinishReason: "stop", Meta: map[string]any{"service_tier": "default"}},
+				{RequestID: "req_text", Usage: &proofUsage{InputTokens: 9, OutputTokens: 4, TotalTokens: 13}, FinishReason: "stop"},
 			},
 			wantKinds: []proofEventKind{proofResponseStart, proofContentBlockStart, proofTextDelta, proofTextDelta, proofContentBlockEnd, proofMessageFinal, proofUsageEvent, proofStop},
 		},
@@ -33,7 +33,7 @@ func TestOpenAICompatibleStreamingProofFitsDraftGrammar(t *testing.T) {
 				{RequestID: "req_tool", ToolIndex: ptr(0), ToolID: "call_1", ToolNameDelta: "weath"},
 				{RequestID: "req_tool", ToolIndex: ptr(0), ToolNameDelta: "er", ToolArgumentsDelta: `{"city"`},
 				{RequestID: "req_tool", ToolIndex: ptr(0), ToolArgumentsDelta: `:"Austin"}`},
-				{RequestID: "req_tool", Usage: &proofUsage{InputTokens: 12, OutputTokens: 8, TotalTokens: 20}, FinishReason: "tool_calls", Meta: map[string]any{"system_fingerprint": "fp_test"}},
+				{RequestID: "req_tool", Usage: &proofUsage{InputTokens: 12, OutputTokens: 8, TotalTokens: 20}, FinishReason: "tool_calls"},
 			},
 			wantKinds: []proofEventKind{proofResponseStart, proofContentBlockStart, proofToolCallDelta, proofToolCallDelta, proofToolCallDelta, proofContentBlockEnd, proofMessageFinal, proofToolCallReady, proofUsageEvent, proofStop},
 		},
@@ -48,7 +48,7 @@ func TestOpenAICompatibleStreamingProofFitsDraftGrammar(t *testing.T) {
 			name: "accepted provider failure emits terminal error usage and stop",
 			steps: []proofWireStep{
 				{RequestID: "req_err", TextDelta: "partial"},
-				{RequestID: "req_err", AcceptedErr: providerErr, Usage: &proofUsage{InputTokens: 7, OutputTokens: 1, TotalTokens: 8}, Meta: map[string]any{"retryable": false}},
+				{RequestID: "req_err", HTTPStatus: 429, ErrorType: "rate_limit_error", ErrorCode: "rate_limit", AcceptedErr: providerErr, Usage: &proofUsage{InputTokens: 7, OutputTokens: 1, TotalTokens: 8}, Excerpt: "rate limit"},
 			},
 			wantKinds: []proofEventKind{proofResponseStart, proofContentBlockStart, proofTextDelta, proofErrorEvent, proofUsageEvent, proofStop},
 			wantErr:   true,
@@ -80,7 +80,7 @@ func TestOpenAICompatibleProviderPackageKeepsProductPolicyOutOfCore(t *testing.T
 	for i := range modelType.NumField() {
 		got = append(got, modelType.Field(i).Name)
 	}
-	want := []string{"Model", "APIKey", "BaseURL", "HTTPClient"}
+	want := []string{"Model", "APIKey", "BaseURL", "HTTPClient", "Options"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("ChatModel fields = %v, want %v", got, want)
 	}
@@ -91,6 +91,12 @@ func TestOpenAICompatibleProviderPackageKeepsProductPolicyOutOfCore(t *testing.T
 			if strings.Contains(lower, forbidden) {
 				t.Fatalf("ChatModel field %q contains forbidden core concern %q", field, forbidden)
 			}
+		}
+	}
+	optionsType := reflect.TypeOf(openai.ChatOptions{})
+	for i := 0; i < optionsType.NumField(); i++ {
+		if optionsType.Field(i).Type.Kind() == reflect.Map {
+			t.Fatalf("ChatOptions field %q is an arbitrary pass-through map", optionsType.Field(i).Name)
 		}
 	}
 }
@@ -119,7 +125,10 @@ type proofWireStep struct {
 	ToolArgumentsDelta string
 	FinishReason       string
 	Usage              *proofUsage
-	Meta               map[string]any
+	HTTPStatus         int
+	ErrorType          string
+	ErrorCode          string
+	Excerpt            string
 	SetupErr           error
 	AcceptedErr        error
 }
@@ -174,8 +183,11 @@ type proofDiagnostics struct {
 	RequestID     string
 	Provider      string
 	Package       string
+	HTTPStatus    int
+	ErrorType     string
+	ErrorCode     string
 	RawStopReason string
-	Meta          map[string]any
+	Excerpt       string
 }
 
 func normalizeProofOpenAICompatibleStream(steps []proofWireStep) ([]proofEvent, error) {
@@ -312,8 +324,11 @@ func (s proofStreamState) diagnostics(step proofWireStep) proofDiagnostics {
 		RequestID:     step.RequestID,
 		Provider:      s.provider,
 		Package:       s.pkg,
+		HTTPStatus:    step.HTTPStatus,
+		ErrorType:     step.ErrorType,
+		ErrorCode:     step.ErrorCode,
 		RawStopReason: step.FinishReason,
-		Meta:          step.Meta,
+		Excerpt:       step.Excerpt,
 	}
 }
 
@@ -390,23 +405,20 @@ func assertProofDiagnosticsAreBounded(t *testing.T, events []proofEvent) {
 		if event.Diagnostics.Package != "github.com/jgabor/go-agent/providers/openai" {
 			t.Fatalf("package diagnostic = %q", event.Diagnostics.Package)
 		}
-		for key, value := range event.Diagnostics.Meta {
-			lowerKey := strings.ToLower(key)
-			lowerValue := strings.ToLower(strings.TrimSpace(toString(value)))
-			for _, forbidden := range []string{"authorization", "api_key", "apikey", "bearer", "credential", "password", "pricing", "marketplace", "registry", "lira_policy"} {
-				if strings.Contains(lowerKey, forbidden) || strings.Contains(lowerValue, forbidden) {
-					t.Fatalf("diagnostic metadata exposes forbidden concern: %q=%v", key, value)
-				}
-			}
+		for _, value := range []string{event.Diagnostics.RequestID, event.Diagnostics.Provider, event.Diagnostics.Package, event.Diagnostics.ErrorType, event.Diagnostics.ErrorCode, event.Diagnostics.RawStopReason, event.Diagnostics.Excerpt} {
+			assertProofDiagnosticTextIsNonSecret(t, value)
 		}
 	}
 }
 
-func toString(value any) string {
-	if value == nil {
-		return ""
+func assertProofDiagnosticTextIsNonSecret(t *testing.T, value string) {
+	t.Helper()
+	lowerValue := strings.ToLower(strings.TrimSpace(value))
+	for _, forbidden := range []string{"authorization", "api_key", "apikey", "bearer", "credential", "password", "prompt", "messages", "tool_args", "environment", "pricing", "marketplace", "registry", "lira_policy"} {
+		if strings.Contains(lowerValue, forbidden) {
+			t.Fatalf("diagnostic text exposes forbidden concern: %q", value)
+		}
 	}
-	return strings.TrimPrefix(strings.TrimSuffix(reflect.ValueOf(value).String(), ">"), "<")
 }
 
 func ptr[T any](value T) *T {

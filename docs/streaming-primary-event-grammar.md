@@ -26,12 +26,11 @@ Lira product policy.
 `Message` becomes an ordered list of content blocks. The message role identifies
 the speaker; blocks identify the content carried by that speaker.
 
-| Field    | Semantics                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------- |
-| `Role`   | `system`, `user`, `assistant`, or `tool`.                                                      |
-| `Name`   | Optional host/provider-neutral participant name.                                               |
-| `Blocks` | Ordered `[]Block`; empty only for explicit no-content messages when a provider requires one.   |
-| `Meta`   | Optional bounded non-secret diagnostics owned by the host/runtime, not provider control state. |
+| Field    | Semantics                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------- |
+| `Role`   | `system`, `user`, `assistant`, or `tool`.                                                    |
+| `Name`   | Optional host/provider-neutral participant name.                                             |
+| `Blocks` | Ordered `[]Block`; empty only for explicit no-content messages when a provider requires one. |
 
 Block kinds:
 
@@ -61,21 +60,24 @@ Lira cost policy to tool results.
 
 Every accepted run-stream event has an envelope:
 
-| Field         | Semantics                                                                                                                             |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `Sequence`    | Run-local monotonically increasing integer assigned by the runtime after acceptance.                                                  |
-| `RunID`       | Stable ID for one runtime run.                                                                                                        |
-| `TurnID`      | Stable ID for one model assistant response attempt when applicable.                                                                   |
-| `Kind`        | One canonical event kind from this grammar.                                                                                           |
-| `MessageID`   | Stable ID for the assistant or tool message being assembled when applicable.                                                          |
-| `BlockID`     | Stable ID for a block being assembled when applicable.                                                                                |
-| `ToolCallID`  | Stable ID for tool-call deltas, final calls, execution, results, and related errors when applicable.                                  |
-| `Payload`     | Kind-specific payload.                                                                                                                |
-| `Diagnostics` | Optional non-secret metadata such as request IDs, provider/package identifiers, raw stop reason, or opaque host-supplied diagnostics. |
+| Field         | Semantics                                                                                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Sequence`    | Run-local monotonically increasing integer assigned by the runtime after acceptance.                                                                                       |
+| `RunID`       | Stable ID for one runtime run.                                                                                                                                             |
+| `TurnID`      | Stable ID for one model assistant response attempt when applicable.                                                                                                        |
+| `Kind`        | One canonical event kind from this grammar.                                                                                                                                |
+| `MessageID`   | Stable ID for the assistant or tool message being assembled when applicable.                                                                                               |
+| `BlockID`     | Stable ID for a block being assembled when applicable.                                                                                                                     |
+| `ToolCallID`  | Stable ID for tool-call deltas, final calls, execution, results, and related errors when applicable.                                                                       |
+| `Payload`     | Kind-specific payload.                                                                                                                                                     |
+| `Diagnostics` | Optional bounded non-secret provider diagnostics: provider/package identifiers, request ID, HTTP status, provider error type/code, raw stop reason, and sanitized excerpt. |
 
-Envelope diagnostics are observational. They must not contain credentials,
-authorization state, registry/provider selection policy, persisted settings,
-pricing, budget policy, marketplace metadata, workdir behavior, or Lira policy.
+Envelope diagnostics are observational and closed. They must not contain
+credentials, authorization state, full prompts/messages, unredacted tool
+arguments, environment values, credential-bearing URLs, registry/provider
+selection policy, persisted settings, pricing, budget policy, marketplace
+metadata, workdir behavior, or Lira policy. The core diagnostics surface must
+not include arbitrary maps or opaque provider/host metadata.
 
 ## Event Kinds
 
@@ -89,7 +91,7 @@ pricing, budget policy, marketplace metadata, workdir behavior, or Lira policy.
 | `message_final`       | Complete assistant `Message`                                                               | The assistant message assembled for the turn. It must match prior block starts, deltas, and ends.                                                                                               |
 | `tool_call_ready`     | Complete `ToolCall`                                                                        | A finalized tool call is ready for policy/execution. Emitted after its tool-call block is complete and before the tool executes.                                                                |
 | `tool_result`         | Complete `ToolResult` and tool-result `Message` or block                                   | A tool execution result is appended to the transcript.                                                                                                                                          |
-| `usage`               | `Usage`                                                                                    | Generic token/cache/request metadata for a completed or terminal provider interaction.                                                                                                          |
+| `usage`               | `Usage`                                                                                    | Typed token/cache/request/provider/model facts for a completed or terminal provider interaction.                                                                                                |
 | `stop`                | `StopReason`                                                                               | Terminal accepted-run stop state. Exactly one terminal stop is emitted for an accepted run.                                                                                                     |
 | `error`               | `Error` and terminal classification                                                        | Terminal accepted-run error state, or non-terminal diagnostic only when explicitly marked non-terminal by a future extension. In this plan, accepted stream failures use terminal error events. |
 
@@ -112,8 +114,8 @@ Once a turn is accepted, the ordering rules are:
 5. `message_final` follows every ended assistant content block for that response.
 6. `tool_call_ready` follows finalization of the corresponding tool-call block and precedes execution of that call.
 7. `tool_result` follows execution and policy acceptance of that call's result.
-8. `usage` is emitted when usage metadata is known. It may appear before `stop`, after `message_final`, or after a terminal `error` if the provider supplies usage with an error, but it cannot appear after `stop`.
-9. `error`, when terminal, may occur only before `stop`. After a terminal `error`, the only allowed events are optional `usage` metadata and the required terminal `stop`; no content, tool-call, tool-result, final-message, or second terminal event may follow it.
+8. `usage` is emitted when typed usage facts are known. It may appear before `stop`, after `message_final`, or after a terminal `error` if the provider supplies usage with an error, but it cannot appear after `stop`.
+9. `error`, when terminal, may occur only before `stop`. After a terminal `error`, the only allowed events are optional `usage` facts and the required terminal `stop`; no content, tool-call, tool-result, final-message, or second terminal event may follow it.
 10. `stop` is the final accepted-run event. No event of any kind may follow `stop`, including `error`.
 
 `message_final`, `usage`, `error`, and `stop` must not contradict each other. A
@@ -160,55 +162,53 @@ closed, `message_final` makes the assistant message complete, and
 `tool_call_ready` marks each complete call eligible for policy and execution.
 Execution must not start from partial name or argument deltas.
 
-## Usage Metadata
+## Usage Facts
 
-`Usage` is generic runtime/provider accounting metadata. It is descriptive, not
-policy enforcement.
-
-Allowed fields:
-
-| Field               | Semantics                                                                    |
-| ------------------- | ---------------------------------------------------------------------------- |
-| `InputTokens`       | Provider-reported input token count.                                         |
-| `OutputTokens`      | Provider-reported output token count.                                        |
-| `TotalTokens`       | Provider-reported total when available; reducers may derive only when safe.  |
-| `CachedInputTokens` | Input tokens served from provider cache.                                     |
-| `CacheWriteTokens`  | Tokens written to provider cache.                                            |
-| `RequestID`         | Non-secret provider request correlation ID.                                  |
-| `Provider`          | Optional provider/package identifier for diagnostics.                        |
-| `Model`             | Optional concrete model identifier reported by the provider.                 |
-| `Meta`              | Bounded non-secret opaque metadata that is useful for diagnostics or replay. |
-
-Excluded fields and semantics: cost, price, currency, budget policy, spend
-limits, marketplace metadata, package registry metadata, Lira cost policy, and
-any host product billing interpretation. Hosts may compute cost outside core
-from usage plus their own pricing tables, but that is not part of this grammar.
-
-## Generic Turn Options
-
-Generic options are host-supplied runtime/provider hints. They are optional and
-must be bounded so the core does not become a provider registry or settings
-store.
+`Usage` is a closed set of runtime/provider accounting facts. It is
+descriptive, not policy enforcement.
 
 Allowed fields:
 
-| Field                | Semantics                                                                                                                        |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `MaxOutputTokens`    | Maximum generated output tokens requested for a turn.                                                                            |
-| `Temperature`        | Sampling temperature.                                                                                                            |
-| `ReasoningEffort`    | Provider-neutral effort hint such as `low`, `medium`, or `high`.                                                                 |
-| `StopSequences`      | Literal stop sequences requested by the host.                                                                                    |
-| `ResponseFormat`     | Generic text/JSON-object/JSON-schema-capable response-format hint.                                                               |
-| `ProviderExtensions` | Bounded map of host-supplied, non-secret provider-specific knobs. Keys must be explicit strings; values must be JSON-compatible. |
+| Field               | Semantics                                                                   |
+| ------------------- | --------------------------------------------------------------------------- |
+| `InputTokens`       | Provider-reported input token count.                                        |
+| `OutputTokens`      | Provider-reported output token count.                                       |
+| `TotalTokens`       | Provider-reported total when available; reducers may derive only when safe. |
+| `CachedInputTokens` | Input tokens served from provider cache.                                    |
+| `CacheWriteTokens`  | Tokens written to provider cache.                                           |
+| `RequestID`         | Non-secret provider request correlation ID.                                 |
+| `Provider`          | Optional provider/package identifier for diagnostics.                       |
+| `Model`             | Optional concrete model identifier reported by the provider.                |
+
+Excluded fields and semantics: arbitrary metadata maps, replay payloads, cost,
+price, currency, budget policy, spend limits, marketplace metadata, package
+registry metadata, Lira cost policy, and any host product billing
+interpretation. Hosts may compute cost outside core from usage plus their own
+pricing tables, but that is not part of this grammar.
+
+## Turn Options
+
+Core turn options are provider-neutral runtime/provider hints. They are optional
+and narrow so the core does not become a provider registry, settings store, or
+provider-specific pass-through surface.
+
+Allowed fields:
+
+| Field             | Semantics                                             |
+| ----------------- | ----------------------------------------------------- |
+| `MaxOutputTokens` | Maximum generated output tokens requested for a turn. |
+| `Temperature`     | Sampling temperature.                                 |
+| `StopSequences`   | Literal stop sequences requested by the host.         |
 
 Excluded options and semantics: credentials, auth flows, registry/provider
 selection, persisted settings, pricing, budgets, marketplace metadata, workdir
 behavior, prompt/resource loading, CLI shell configuration, MCP configuration,
 sub-agent orchestration, workflow DSL controls, and Lira policy.
 
-Provider extensions are an escape hatch, not a control plane. They are supplied
-by the host with a concrete provider adapter already chosen; they do not select
-providers, discover auth, load settings, or persist preferences.
+Non-universal provider knobs do not belong in core turn options or arbitrary
+maps. OpenAI Chat Completions controls such as reasoning effort, response
+format, and stream usage inclusion must live in bounded typed provider-package
+options for a concrete adapter that has already been selected by the host.
 
 ## Reducer Contract
 

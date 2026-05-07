@@ -2,16 +2,15 @@
 
 Date: 2026-05-07
 
-This document records the Task 3 proof from the Streaming-Primary Runtime
-Contract plan. At the time it was written, the proof was a pre-migration
-artifact only and did not itself migrate the runtime or
-`providers/openai.ChatModel` to the streaming-primary seam.
+This document records the OpenAI-compatible provider proof from the
+Streaming-Primary Runtime Contract work. It began as pre-migration evidence and
+is now historical context for the implemented streaming-primary seam.
 
 Repository reality has since moved on: Task 5 migrated the public model seam to
 `Model.Stream(ctx, TurnRequest, emit) error`, and the current
-`providers/openai.ChatModel` implements `goagent.Model` through `ChatModel.Stream`.
-The proof below remains historical evidence that OpenAI-compatible provider
-behavior fit the canonical grammar before that migration.
+`providers/openai.ChatModel` implements `goagent.Model` through
+`ChatModel.Stream`. The Chat Completions Fidelity work then replaced the shallow
+complete-response adapter path with direct Chat Completions SSE parsing.
 
 ## Proof Scope
 
@@ -38,11 +37,15 @@ The proof keeps diagnostics observational and bounded:
 | --------------------------- | ---------------------------------------------------------------------- |
 | Request ID                  | Non-secret provider correlation only.                                  |
 | Provider/package identifier | `openai-compatible` and `github.com/jgabor/go-agent/providers/openai`. |
+| HTTP status                 | Numeric provider response status when available.                       |
+| Provider error type/code    | Provider-reported stable error classification when available.          |
 | Raw stop reason             | Retained as diagnostic context, not a provider-specific event field.   |
-| Opaque metadata             | Allowed only when non-secret and not product policy.                   |
+| Sanitized excerpt           | Bounded non-secret excerpt after removing sensitive values.            |
 
 The proof rejects diagnostic metadata that exposes credentials, authorization
-headers, API keys, pricing, registry, marketplace, or Lira policy concepts.
+headers, API keys, full prompts/messages, unredacted tool arguments,
+environment values, credential-bearing URLs, pricing, registry, marketplace, or
+Lira policy concepts. It does not allow opaque diagnostic maps.
 
 ## Grammar Finding
 
@@ -54,7 +57,10 @@ bounded diagnostics. The draft grammar does not need revision before Task 4.
 ## Provider Configuration Review
 
 The current provider package remains a simple adapter configuration surface:
-`Model`, `APIKey`, `BaseURL`, and `HTTPClient`. It implements the public
-`goagent.Model` streaming seam without adding custom auth discovery, provider
-registry, provider selection, model marketplace behavior, pricing, workdir
-behavior, or Lira product policy to core.
+`Model`, `APIKey`, `BaseURL`, `HTTPClient`, and typed `ChatOptions`. It
+implements the public `goagent.Model` streaming seam by sending Chat Completions
+requests with `stream: true`, parsing SSE text/tool-call/usage/finish/error
+records into canonical events, and rejecting non-SSE success responses instead
+of hiding them behind a complete-response fallback. It still does not add custom
+auth discovery, provider registry, provider selection, model marketplace
+behavior, pricing, workdir behavior, or Lira product policy to core.

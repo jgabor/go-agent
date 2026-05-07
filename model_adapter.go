@@ -33,7 +33,7 @@ func StreamTurnResult(turn TurnResult, emit func(Event)) {
 			block.ID = fmt.Sprintf("block-%d", i+1)
 			message.Blocks[i].ID = block.ID
 		}
-		event := Event{Kind: EventContentBlockStart, MessageID: "message-1", BlockID: block.ID, BlockKind: block.Kind}
+		event := Event{Kind: EventContentBlockStart, MessageID: "message-1", BlockID: block.ID, BlockKind: block.Kind, Diagnostics: turn.Diagnostics}
 		if block.Kind == BlockToolCall {
 			event.ToolCallID = block.ToolCall.ID
 		}
@@ -49,7 +49,7 @@ func StreamTurnResult(turn TurnResult, emit func(Event)) {
 			emit(Event{Kind: EventContentBlockEnd, BlockID: block.ID, BlockKind: BlockToolCall, ToolCallID: block.ToolCall.ID, ToolCall: block.ToolCall})
 		}
 	}
-	emit(Event{Kind: EventMessageFinal, MessageID: "message-1", Message: message})
+	emit(Event{Kind: EventMessageFinal, MessageID: "message-1", Message: message, Diagnostics: turn.Diagnostics})
 	for _, call := range message.ToolCalls {
 		emit(Event{Kind: EventToolCallReady, ToolCallID: call.ID, ToolCall: call})
 	}
@@ -84,5 +84,5 @@ func finalTurnMessage(turn TurnResult) Message {
 }
 
 func (u Usage) empty() bool {
-	return u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 && u.CachedInputTokens == 0 && u.CacheWriteTokens == 0 && u.RequestID == "" && u.Provider == "" && u.Model == "" && len(u.Meta) == 0
+	return u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 && u.CachedInputTokens == 0 && u.CacheWriteTokens == 0 && u.RequestID == "" && u.Provider == "" && u.Model == ""
 }

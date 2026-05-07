@@ -198,7 +198,7 @@ func canonicalAssemblyEvents() []goagent.Event {
 		{Sequence: 10, Kind: goagent.EventMessageFinal, MessageID: "msg_1", Message: assistant},
 		{Sequence: 11, Kind: goagent.EventToolCallReady, ToolCallID: call.ID, ToolCall: call},
 		{Sequence: 12, Kind: goagent.EventToolResult, ToolCallID: call.ID, BlockID: "block_result", ToolResult: result, Message: toolMessage},
-		{Sequence: 13, Kind: goagent.EventUsage, Usage: goagent.Usage{InputTokens: 10, OutputTokens: 7, TotalTokens: 17, CachedInputTokens: 2, RequestID: "req_123", Provider: "test-provider", Model: "test-model", Meta: map[string]any{"tier": "test"}}},
+		{Sequence: 13, Kind: goagent.EventUsage, Usage: goagent.Usage{InputTokens: 10, OutputTokens: 7, TotalTokens: 17, CachedInputTokens: 2, RequestID: "req_123", Provider: "test-provider", Model: "test-model"}},
 		{Sequence: 14, Kind: goagent.EventStop, StopReason: goagent.StopComplete},
 	}
 }

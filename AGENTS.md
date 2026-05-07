@@ -4,6 +4,7 @@
 
 - This repo now has implemented Go runtime packages. README product sections remain partly aspirational; the Features & Roadmap table is the current source of truth for product/runtime capability status, not completed setup history.
 - The runtime contract is streaming-primary: `Model.Stream(ctx, TurnRequest, emit func(Event)) error` is the provider seam, while `Run` results are assembled from canonical events; `ModelFromSimple` is the ergonomic adapter for tests and local final-response models.
+- `providers/openai.ChatModel.Stream` is a direct OpenAI-compatible Chat Completions SSE adapter: it emits canonical text/tool-call/usage/finish/error events, emits success stops for completed assistant turns after usage, and leaves tool-call turns unstopped until Runner tool execution.
 - Do not add placeholder runtime code just to make `go test ./...`, `go vet ./...`, `golangci-lint`, or `govulncheck` do work.
 - Product direction lives in `.agentera/vision.yaml`: library-first Go agent runtime, CLI second, no hosted platform or workflow DSL by default.
 

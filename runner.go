@@ -132,6 +132,7 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 			Messages:     append([]Message(nil), state.session.Messages...),
 			Tools:        cloneToolSpecs(r.toolSpecs),
 			Session:      state.session,
+			Options:      request.Options,
 		})
 		if err != nil {
 			if stopReason == "" {

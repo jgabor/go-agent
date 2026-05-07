@@ -8,7 +8,10 @@ the runtime redesign.
 
 Freshness note: this is a Task 1 historical boundary document. The
 pre-migration facts below were true when the break list was written; later plan
-tasks migrated the repository to the streaming-primary contract.
+tasks migrated the repository to the streaming-primary contract. The later Chat
+Completions Fidelity work also made `providers/openai.ChatModel.Stream` a direct
+OpenAI-compatible Chat Completions SSE adapter rather than a complete-response
+adapter.
 
 ## Pre-Migration Contract Reviewed
 
@@ -37,11 +40,11 @@ accidental drift.
 | Surface                      | Intentional break                                                                                                                                    | Target boundary                                                                                                                                                          |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Model` method               | Replace `Turn(context.Context, TurnRequest) (TurnResult, error)` as the primary provider seam.                                                       | Provider implementations emit canonical `Event` streams; completion is assembled from that stream.                                                                       |
-| `TurnRequest` fields         | Add generic runtime/provider options and remove the assumption that a turn request is only instructions, messages, tools, and session.               | Options may cover generic output limits, sampling, reasoning effort, stop sequences, response format, and bounded provider metadata.                                     |
+| `TurnRequest` fields         | Add narrow provider-neutral options and remove the assumption that a turn request is only instructions, messages, tools, and session.                | Core options cover output limits, temperature, and stop sequences; provider-specific options such as reasoning effort and response format stay in provider packages.     |
 | `TurnResult` type            | Stop treating whole-turn `TurnResult` as the canonical model output.                                                                                 | Final response/result values are projections from canonical events. A simple-model adapter may preserve ergonomic test/fake models without keeping `TurnResult` primary. |
 | `Runner.Run` semantics       | Change from a separate completion path to stream assembly.                                                                                           | `Run` consumes the same canonical event sequence as `Stream` and returns the assembled final result plus Go errors according to terminal stream semantics.               |
 | `Runner.Stream` semantics    | Change from a best-effort event channel over a non-streaming model loop to the authoritative runtime stream.                                         | `Stream` exposes canonical event ordering, accepted-turn terminal error/stop events, and enough data to reconstruct final messages/results.                              |
-| `RunResult` fields           | Expand beyond `Text`, `StopReason`, `Session`, and `Events` as needed for assembled messages and usage metadata.                                     | Final result is assembled from canonical events and may expose block messages and generic usage metadata.                                                                |
+| `RunResult` fields           | Expand beyond `Text`, `StopReason`, `Session`, and `Events` as needed for assembled messages and typed usage facts.                                  | Final result is assembled from canonical events and may expose block messages and typed token/cache/request/provider/model usage facts.                                  |
 | `Message` fields             | Break `Content string`, `ToolCallID`, and `ToolCalls []ToolCall` as the transcript grammar.                                                          | `Message` becomes block-based, representing text, tool-call, and tool-result blocks without provider-specific parsing.                                                   |
 | `ToolResult.Content`         | Break string-only tool results.                                                                                                                      | Tool results become JSON-compatible so text and structured values can be preserved through messages, events, policy, and sessions.                                       |
 | `EventKind` names            | Current event names are not guaranteed stable.                                                                                                       | Task 2 will define canonical event names for start/delta/end/final message, tool-call deltas/finalization, tool results, usage, errors, and stops.                       |
@@ -79,7 +82,7 @@ These remain outside go-agent core for this plan:
 | Sub-agents                                         | Orchestration shape remains host-owned.                                                              |
 | Workflow DSL                                       | Go remains the orchestration language; no workflow DSL in core.                                      |
 | Workdir behavior                                   | Host/provider-specific concern, especially for CLI subprocess providers.                             |
-| Pricing and cost policy                            | Generic usage metadata may be represented; pricing and budget/product policy remain host-owned.      |
+| Pricing and cost policy                            | Typed usage facts may be represented; pricing and budget/product policy remain host-owned.           |
 | Lira policy                                        | Lira keeps registry, auth, CLI providers, workflow recovery, pricing, workdir, and product behavior. |
 
 ## Review Notes

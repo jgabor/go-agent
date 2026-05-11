@@ -142,9 +142,15 @@ func (r *runner) run(ctx context.Context, request RunRequest, emit func(Event)) 
 	}
 
 	maxSteps := effectiveMaxSteps(request)
-	runDecision, err := r.decide(runCtx, &state, "", Decision{Kind: DecisionRunStart, Request: request, Session: state.session})
+	runDecision, err := r.decide(runCtx, &state, "", Decision{
+		Kind:    DecisionRunStart,
+		Request: request,
+		Tools:   cloneToolSpecs(runToolSpecs),
+		Session: state.session,
+	})
 	if err != nil {
-		return r.saveResult(ctx, state.fail(StopPolicyDenied, eventPayload{err: err}))
+		reason, _ := policyErrorStopReason(&state, err)
+		return r.saveResult(ctx, state.fail(reason, eventPayload{err: err}))
 	}
 	if !runDecision.Allowed {
 		return r.saveResult(ctx, r.finish(ctx, &state, "", StopPolicyDenied))
@@ -298,7 +304,11 @@ func (r *runner) retryModel(ctx context.Context, operation retryOperation[modelT
 		operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeConsidered, Delay: delay})
 		decision, policyErr := r.decide(ctx, operation.state, operation.turnID, Decision{Kind: DecisionRetry, Retry: operation.context(nextAttempt, maxAttempts, err), Request: operation.state.request, Session: operation.state.session})
 		if policyErr != nil {
-			return modelTurnStream{}, StopPolicyDenied, policyErr
+			stop, canceled := policyErrorStopReason(operation.state, policyErr)
+			if canceled {
+				operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeCanceled, Delay: delay, StopReason: stop})
+			}
+			return modelTurnStream{}, stop, policyErr
 		}
 		if !decision.Allowed {
 			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeDenied, StopReason: StopPolicyDenied})
@@ -414,7 +424,8 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 
 	policyDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolCall, ToolCall: call, Tool: spec, Session: state.session})
 	if err != nil {
-		result := state.fail(StopPolicyDenied, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, err: err})
+		reason, _ := policyErrorStopReason(state, err)
+		result := state.fail(reason, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, err: err})
 		return &result
 	}
 	if !policyDecision.Allowed {
@@ -475,7 +486,8 @@ func (r *runner) callTool(ctx context.Context, state *runState, turnID string, c
 	message := toolResultMessage(call, toolResult)
 	resultDecision, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionToolResult, ToolCall: call, Tool: spec, ToolResult: toolResult, Message: message, Session: state.session})
 	if err != nil {
-		result := state.fail(StopPolicyDenied, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, err: err})
+		reason, _ := policyErrorStopReason(state, err)
+		result := state.fail(reason, eventPayload{turnID: turnID, toolCallID: call.ID, tool: spec, err: err})
 		return &result
 	}
 	if !resultDecision.Allowed {
@@ -640,8 +652,12 @@ func runRetryOperation[T any](ctx context.Context, r *runner, operation retryOpe
 		operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeConsidered, Delay: delay})
 		decision, policyErr := r.decide(ctx, operation.state, operation.turnID, Decision{Kind: DecisionRetry, Retry: operation.context(nextAttempt, maxAttempts, err), Request: operation.state.request, ToolCall: operation.toolCall, Tool: operation.tool, Session: operation.state.session})
 		if policyErr != nil {
+			stop, canceled := policyErrorStopReason(operation.state, policyErr)
+			if canceled {
+				operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeCanceled, Delay: delay, StopReason: stop})
+			}
 			var zero T
-			return zero, StopPolicyDenied, policyErr
+			return zero, stop, policyErr
 		}
 		if !decision.Allowed {
 			operation.sendRetry(RetryEvent{Target: operation.target, Reason: operation.reason, Attempt: nextAttempt, MaxAttempts: maxAttempts, Outcome: RetryOutcomeDenied, StopReason: StopPolicyDenied})
@@ -709,6 +725,13 @@ func contextStopReasonOrCanceled(state *runState, err error) StopReason {
 	return StopCanceled
 }
 
+func policyErrorStopReason(state *runState, err error) (StopReason, bool) {
+	if reason, ok := contextStopReason(state, err); ok {
+		return reason, true
+	}
+	return StopPolicyDenied, false
+}
+
 func (operation retryOperation[T]) context(attempt int, maxAttempts int, err error) RetryContext {
 	return RetryContext{
 		Target:      operation.target,
@@ -752,9 +775,13 @@ func shouldEmitPolicyPending(policyExplicit bool, kind DecisionKind) bool {
 }
 
 func (r *runner) finish(ctx context.Context, state *runState, turnID string, reason StopReason) RunResult {
+	if state != nil {
+		ctx = state.ctx
+	}
 	_, err := r.decide(ctx, state, turnID, Decision{Kind: DecisionStop, Request: state.request, Session: state.session, StopReason: reason, Events: append([]Event(nil), state.events...)})
 	if err != nil {
-		return state.fail(StopPolicyDenied, eventPayload{turnID: turnID, err: err})
+		stopReason, _ := policyErrorStopReason(state, err)
+		return state.fail(stopReason, eventPayload{turnID: turnID, err: err})
 	}
 	return state.finish(reason)
 }
@@ -1066,6 +1093,7 @@ func cloneToolSpec(spec ToolSpec) ToolSpec {
 
 func cloneDecision(decision Decision) Decision {
 	decision.Request = cloneRunRequest(decision.Request)
+	decision.Tools = cloneToolSpecs(decision.Tools)
 	decision.Tool = cloneToolSpec(decision.Tool)
 	decision.ToolResult = cloneToolResult(decision.ToolResult)
 	decision.Message = cloneMessage(decision.Message)
@@ -1077,6 +1105,12 @@ func cloneDecision(decision Decision) Decision {
 }
 
 func cloneRunRequest(r RunRequest) RunRequest {
+	if r.Tools != nil {
+		r.Tools = append([]Tool{}, r.Tools...)
+	}
+	if r.ToolNames != nil {
+		r.ToolNames = append([]string{}, r.ToolNames...)
+	}
 	r.Metadata = cloneStringMap(r.Metadata)
 	return r
 }
@@ -1096,7 +1130,16 @@ func (r *runner) prepareRun(request RunRequest) (map[string]registeredTool, []To
 	if err := validateRunLimits(request); err != nil {
 		return nil, nil, err
 	}
-	return buildRunToolView(r.tools, r.toolSpecs, request.ToolNames)
+	tools := r.tools
+	specs := r.toolSpecs
+	if request.Tools != nil {
+		var err error
+		tools, specs, err = buildRunScopedToolRegistry(r.tools, request.Tools)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return buildRunToolView(tools, specs, request.ToolNames)
 }
 
 func validateRunLimits(request RunRequest) error {
@@ -1146,12 +1189,25 @@ func buildRunToolView(agentTools map[string]registeredTool, agentSpecs []ToolSpe
 		seen[name] = struct{}{}
 		rt, ok := agentTools[name]
 		if !ok {
-			return nil, nil, fmt.Errorf("goagent: unknown tool %q not registered on Agent", name)
+			return nil, nil, fmt.Errorf("goagent: unknown tool %q not available in effective tool set", name)
 		}
 		out[name] = rt
 		specs = append(specs, cloneToolSpec(rt.spec))
 	}
 	return out, specs, nil
+}
+
+func buildRunScopedToolRegistry(agentTools map[string]registeredTool, runTools []Tool) (map[string]registeredTool, []ToolSpec, error) {
+	tools, specs, err := buildToolRegistry(runTools)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, spec := range specs {
+		if _, exists := agentTools[spec.Name]; exists {
+			return nil, nil, fmt.Errorf("goagent: run-scoped tool %q conflicts with Agent tool of same name", spec.Name)
+		}
+	}
+	return tools, specs, nil
 }
 
 func toolResultPayloadBytes(result ToolResult) int64 {

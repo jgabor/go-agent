@@ -40,7 +40,7 @@ scope:
   excluded:
     - Aila CLI, TUI, FSM, config files, artifact resolver, package lifecycle, permission UI, or capability adapters.
     - Built-in go-agent implementations of read, edit, write, bash, grep, find, or fetch tools.
-    - Provider registry, credential discovery, token exchange, device-code login, pricing, account selection, or model marketplace behavior.
+    - Provider registry, credential discovery, token exchange, device-code login, account choice, or model marketplace behavior.
     - MCP as a core dependency and sub-agent orchestration as a core runtime hierarchy.
     - Workflow DSL, hosted control plane, or product shell behavior.
   deferred:

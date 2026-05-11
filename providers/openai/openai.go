@@ -2,8 +2,8 @@
 //
 // ChatModel.Stream emits the canonical go-agent event grammar (text deltas, tool-call
 // deltas, usage, finish, terminal errors, stops). HTTP configuration and credentials
-// stay host-owned. ChatModel implements goagent.ModelCapabilitiesProvider for optional
-// static capability hints.
+// stay host-owned. ChatModel implements goagent.ModelCapabilitiesProvider using a small
+// curated model facts table; unknown model IDs return adapter identity fields only.
 //
 // Protocols that cannot honor the streaming Model contract (for example WebSocket-only
 // APIs) should use a separate adapter or design follow-up rather than stretching this one.
@@ -168,15 +168,29 @@ func (m ChatModel) baseURL() string {
 }
 
 // ModelCapabilities implements goagent.ModelCapabilitiesProvider.
+// Numeric limits and feature flags are filled only for models listed in the
+// adapter's curated facts table; otherwise they remain zero/false and
+// AllowedReasoningValues stays empty so callers do not treat guesses as facts.
+// Provider and ModelID are always set for the selected ChatModel.
 func (m ChatModel) ModelCapabilities() goagent.ModelCapabilities {
-	return goagent.ModelCapabilities{
-		Provider:          providerName,
-		ModelID:           strings.TrimSpace(m.Model),
-		MaxContextTokens:  0,
-		SupportsTools:     true,
-		SupportsStreaming: true,
-		SupportsReasoning: true,
+	id := strings.TrimSpace(m.Model)
+	caps := goagent.ModelCapabilities{
+		Provider: providerName,
+		ModelID:  id,
 	}
+	facts, ok := resolveOpenAIModelFacts(id)
+	if !ok {
+		return caps
+	}
+	caps.MaxContextTokens = facts.MaxContextTokens
+	caps.MaxOutputTokens = facts.MaxOutputTokens
+	caps.SupportsTools = facts.SupportsTools
+	caps.SupportsStreaming = facts.SupportsStream
+	caps.SupportsReasoning = facts.SupportsReason
+	if len(facts.ReasoningValues) > 0 {
+		caps.AllowedReasoningValues = append([]string(nil), facts.ReasoningValues...)
+	}
+	return caps
 }
 
 func (m ChatModel) client() *http.Client {

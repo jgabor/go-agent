@@ -520,6 +520,17 @@ func TestRunnerStreamEmitsRunEvents(t *testing.T) {
 	}
 }
 
+func assertToolNames(t *testing.T, specs []goagent.ToolSpec, want []string) {
+	t.Helper()
+	got := make([]string, len(specs))
+	for i, spec := range specs {
+		got[i] = spec.Name
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tool names = %v, want %v", got, want)
+	}
+}
+
 func assertAdvancedToolSpec(t *testing.T, spec goagent.ToolSpec) {
 	t.Helper()
 	if spec.Name != "weather" || spec.Description == "" || spec.Schema["type"] != "object" {
@@ -603,6 +614,44 @@ func (t namedTool) Call(context.Context, goagent.ToolCall) (goagent.ToolResult, 
 		return goagent.ToolResult{}, t.err
 	}
 	return goagent.ToolResult{CallID: "call-1", Name: t.name, Content: "tool result"}, nil
+}
+
+func cancelingPolicyOnDecision(kind goagent.DecisionKind, cancel context.CancelFunc) goagent.Policy {
+	return goagent.PolicyFunc(func(ctx context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == kind {
+			cancel()
+			<-ctx.Done()
+			return goagent.PolicyDecision{}, ctx.Err()
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+}
+
+func hasPolicyDeniedStop(events []goagent.Event) bool {
+	for _, event := range events {
+		if event.Kind == goagent.EventStop && event.StopReason == goagent.StopPolicyDenied {
+			return true
+		}
+	}
+	return false
+}
+
+func sawPolicyDecision(events []goagent.Event, kind goagent.DecisionKind) bool {
+	for _, event := range events {
+		if event.Kind == goagent.EventPolicyDecision && event.Decision.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func sawRetryCanceled(events []goagent.Event, stop goagent.StopReason) bool {
+	for _, event := range events {
+		if event.Kind == goagent.EventRetry && event.Retry.Outcome == goagent.RetryOutcomeCanceled && event.Retry.StopReason == stop {
+			return true
+		}
+	}
+	return false
 }
 
 type metadataCountingTool struct {
@@ -770,6 +819,242 @@ func TestRunToolNamesDuplicateReturnsError(t *testing.T) {
 	}
 }
 
+func TestRunScopedToolsReplaceRegisteredTools(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "ephemeral", Input: json.RawMessage(`{}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model: model,
+		Tools: []goagent.Tool{namedTool{name: "registered"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input: "use the run tool",
+		Tools: []goagent.Tool{namedTool{name: "ephemeral"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopComplete {
+		t.Fatalf("StopReason = %q, want complete", result.StopReason)
+	}
+	assertToolNames(t, model.requests[0].Tools, []string{"ephemeral"})
+	if got := model.requests[1].Messages[len(model.requests[1].Messages)-1]; got.Role != goagent.RoleTool || got.Name != "ephemeral" {
+		t.Fatalf("second turn last message = %+v", got)
+	}
+}
+
+func TestRunScopedToolsHideRegisteredTools(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "registered", Input: json.RawMessage(`{}`)}}},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model: model,
+		Tools: []goagent.Tool{namedTool{name: "registered"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input: "try the registered tool",
+		Tools: []goagent.Tool{namedTool{name: "ephemeral"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopToolError {
+		t.Fatalf("StopReason = %q, want tool_error", result.StopReason)
+	}
+	assertToolNames(t, model.requests[0].Tools, []string{"ephemeral"})
+}
+
+func TestRunScopedEmptyToolsExposeNoTools(t *testing.T) {
+	t.Run("model sees empty set", func(t *testing.T) {
+		model := &recordingModel{turns: []goagent.TurnResult{
+			{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "No tools."}, StopReason: goagent.StopComplete},
+		}}
+		runner, err := goagent.NewRunner(goagent.Agent{
+			Model: model,
+			Tools: []goagent.Tool{namedTool{name: "registered"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := runner.Run(context.Background(), goagent.RunRequest{
+			Input: "no tools",
+			Tools: []goagent.Tool{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.StopReason != goagent.StopComplete {
+			t.Fatalf("StopReason = %q, want complete", result.StopReason)
+		}
+		assertToolNames(t, model.requests[0].Tools, nil)
+	})
+
+	t.Run("model cannot call hidden registered tool", func(t *testing.T) {
+		model := &recordingModel{turns: []goagent.TurnResult{
+			{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "registered", Input: json.RawMessage(`{}`)}}},
+		}}
+		runner, err := goagent.NewRunner(goagent.Agent{
+			Model: model,
+			Tools: []goagent.Tool{namedTool{name: "registered"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := runner.Run(context.Background(), goagent.RunRequest{
+			Input: "no tools",
+			Tools: []goagent.Tool{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.StopReason != goagent.StopToolError {
+			t.Fatalf("StopReason = %q, want tool_error", result.StopReason)
+		}
+		assertToolNames(t, model.requests[0].Tools, nil)
+	})
+}
+
+func TestRunScopedToolNameConflictReturnsError(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "unreached"}, StopReason: goagent.StopComplete},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model: model,
+		Tools: []goagent.Tool{namedTool{name: "shared"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runner.Run(context.Background(), goagent.RunRequest{
+		Input: "conflict",
+		Tools: []goagent.Tool{namedTool{name: "shared"}},
+	})
+	if err == nil {
+		t.Fatal("expected run-scoped tool name conflict")
+	}
+	if len(model.requests) != 0 {
+		t.Fatalf("model calls = %d, want 0 before conflict error", len(model.requests))
+	}
+}
+
+func TestRunScopedToolsDoNotLeakToLaterRuns(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "ephemeral", Input: json.RawMessage(`{}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "First done."}, StopReason: goagent.StopComplete},
+		{ToolCalls: []goagent.ToolCall{{ID: "call-2", Name: "ephemeral", Input: json.RawMessage(`{}`)}}},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model: model,
+		Tools: []goagent.Tool{namedTool{name: "registered"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input: "first",
+		Tools: []goagent.Tool{namedTool{name: "ephemeral"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.StopReason != goagent.StopComplete {
+		t.Fatalf("first StopReason = %q, want complete", first.StopReason)
+	}
+
+	second, err := runner.Run(context.Background(), goagent.RunRequest{Input: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.StopReason != goagent.StopToolError {
+		t.Fatalf("second StopReason = %q, want tool_error", second.StopReason)
+	}
+	assertToolNames(t, model.requests[0].Tools, []string{"ephemeral"})
+	assertToolNames(t, model.requests[2].Tools, []string{"registered"})
+}
+
+func TestRunStartPolicyReceivesEffectiveRunScopedToolSpecs(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	alpha, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "alpha",
+		Description: "Alpha run tool.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (string, error) {
+			return "alpha", nil
+		},
+		Safety:      goagent.ToolSafety{ReadOnly: true, Retryable: true},
+		Constraints: goagent.ToolConstraints{Timeout: time.Second, MaxOutputBytes: 64},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "beta",
+		Description: "Beta run tool.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (string, error) {
+			return "beta", nil
+		},
+		Safety:      goagent.ToolSafety{ReadOnly: true},
+		Constraints: goagent.ToolConstraints{MaxOutputBytes: 32},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runStartTools []goagent.ToolSpec
+	policy := goagent.PolicyFunc(func(_ context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionRunStart {
+			runStartTools = append([]goagent.ToolSpec(nil), decision.Tools...)
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model:  model,
+		Tools:  []goagent.Tool{namedTool{name: "registered"}},
+		Policy: policy,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input: "policy view",
+		Tools: []goagent.Tool{alpha, beta},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolNames(t, model.requests[0].Tools, []string{"alpha", "beta"})
+	assertToolNames(t, runStartTools, []string{"alpha", "beta"})
+	if !runStartTools[0].Safety.ReadOnly || !runStartTools[0].Safety.Retryable || runStartTools[0].Constraints.Timeout != time.Second || runStartTools[0].Constraints.MaxOutputBytes != 64 {
+		t.Fatalf("alpha policy metadata = %+v", runStartTools[0])
+	}
+	if !runStartTools[1].Safety.ReadOnly || runStartTools[1].Safety.Retryable || runStartTools[1].Constraints.MaxOutputBytes != 32 {
+		t.Fatalf("beta policy metadata = %+v", runStartTools[1])
+	}
+	for _, event := range result.Events {
+		if event.Kind == goagent.EventPolicyPending && event.Decision.Kind == goagent.DecisionRunStart {
+			assertToolNames(t, event.Decision.Tools, []string{"alpha", "beta"})
+			return
+		}
+	}
+	t.Fatal("missing run-start policy pending event with effective tools")
+}
+
 func TestRunLimitsMaxToolCalls(t *testing.T) {
 	model := &recordingModel{turns: []goagent.TurnResult{
 		{ToolCalls: []goagent.ToolCall{
@@ -897,6 +1182,137 @@ func TestRunLimitsParentDeadlineBeforeMaxDurationIsCanceled(t *testing.T) {
 	}
 	if result.StopReason != goagent.StopCanceled {
 		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunnerClassifiesCanceledPolicyWaits(t *testing.T) {
+	tests := []struct {
+		name      string
+		decision  goagent.DecisionKind
+		agent     func(context.CancelFunc) goagent.Agent
+		wantRetry bool
+	}{
+		{
+			name:     "run start",
+			decision: goagent.DecisionRunStart,
+			agent: func(cancel context.CancelFunc) goagent.Agent {
+				return goagent.Agent{
+					Model:  &recordingModel{turns: []goagent.TurnResult{{Message: goagent.Message{Content: "unreached"}}}},
+					Policy: cancelingPolicyOnDecision(goagent.DecisionRunStart, cancel),
+				}
+			},
+		},
+		{
+			name:     "tool call",
+			decision: goagent.DecisionToolCall,
+			agent: func(cancel context.CancelFunc) goagent.Agent {
+				return goagent.Agent{
+					Model: &recordingModel{turns: []goagent.TurnResult{{
+						ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{}`)}},
+					}}},
+					Tools:  []goagent.Tool{namedTool{name: "weather"}},
+					Policy: cancelingPolicyOnDecision(goagent.DecisionToolCall, cancel),
+				}
+			},
+		},
+		{
+			name:     "tool result",
+			decision: goagent.DecisionToolResult,
+			agent: func(cancel context.CancelFunc) goagent.Agent {
+				return goagent.Agent{
+					Model: &recordingModel{turns: []goagent.TurnResult{{
+						ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{}`)}},
+					}}},
+					Tools:  []goagent.Tool{namedTool{name: "weather"}},
+					Policy: cancelingPolicyOnDecision(goagent.DecisionToolResult, cancel),
+				}
+			},
+		},
+		{
+			name:     "retry",
+			decision: goagent.DecisionRetry,
+			agent: func(cancel context.CancelFunc) goagent.Agent {
+				return goagent.Agent{
+					Model:  &recordingModel{err: errors.New("model unavailable")},
+					Policy: cancelingPolicyOnDecision(goagent.DecisionRetry, cancel),
+					Retry:  goagent.RetryPolicy{MaxAttempts: 2},
+				}
+			},
+			wantRetry: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			agent := tt.agent(cancel)
+			runner, err := goagent.NewRunner(agent)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := runner.Run(ctx, goagent.RunRequest{Input: "go"})
+			if tt.wantRetry && !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run error = %v, want context cancellation", err)
+			}
+			if result.StopReason != goagent.StopCanceled {
+				t.Fatalf("StopReason = %q, want %q", result.StopReason, goagent.StopCanceled)
+			}
+			if hasPolicyDeniedStop(result.Events) {
+				t.Fatalf("policy wait was classified as denied: %+v", result.Events)
+			}
+			if !sawPolicyDecision(result.Events, tt.decision) {
+				t.Fatalf("missing %s policy decision: %+v", tt.decision, result.Events)
+			}
+			if tt.wantRetry && !sawRetryCanceled(result.Events, goagent.StopCanceled) {
+				t.Fatalf("missing canceled retry observation: %+v", result.Events)
+			}
+			if model, ok := agent.Model.(*recordingModel); ok && tt.decision == goagent.DecisionRunStart && len(model.requests) != 0 {
+				t.Fatalf("model calls = %d, want 0", len(model.requests))
+			}
+		})
+	}
+}
+
+func TestRunLimitsMaxDurationDuringStopPolicyWait(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{{
+		Message:    goagent.Message{Role: goagent.RoleAssistant, Content: "done"},
+		StopReason: goagent.StopComplete,
+	}}}
+	policy := goagent.PolicyFunc(func(ctx context.Context, decision goagent.Decision) (goagent.PolicyDecision, error) {
+		if decision.Kind == goagent.DecisionStop {
+			<-ctx.Done()
+			return goagent.PolicyDecision{}, ctx.Err()
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	result, err := runner.Run(ctx, goagent.RunRequest{
+		Input:  "go",
+		Limits: goagent.RunLimits{MaxDuration: 20 * time.Millisecond},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("run took %s; stop policy wait did not observe the run duration limit", elapsed)
+	}
+	if result.StopReason != goagent.StopDurationLimit {
+		t.Fatalf("StopReason = %q, want %q", result.StopReason, goagent.StopDurationLimit)
+	}
+	if hasPolicyDeniedStop(result.Events) {
+		t.Fatalf("duration-limited stop policy wait was classified as denied: %+v", result.Events)
+	}
+	if !sawPolicyDecision(result.Events, goagent.DecisionStop) {
+		t.Fatalf("missing stop policy decision: %+v", result.Events)
 	}
 }
 

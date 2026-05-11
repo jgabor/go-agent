@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -479,20 +480,67 @@ func TestChatModelValidatesConfiguration(t *testing.T) {
 	}
 }
 
-func TestChatModelModelCapabilitiesProvider(t *testing.T) {
-	m := openai.ChatModel{Model: "gpt-test", APIKey: "test-key"}
+func TestChatModelModelCapabilitiesKnownOpenAIModel(t *testing.T) {
+	m := openai.ChatModel{Model: "gpt-4o", APIKey: "test-key"}
 	caps, ok := goagent.ModelCapabilitiesOf(m)
 	if !ok {
 		t.Fatal("expected ChatModel to implement ModelCapabilitiesProvider")
 	}
-	if caps.Provider != "openai-compatible" || caps.ModelID != "gpt-test" {
+	if caps.Provider != "openai-compatible" || caps.ModelID != "gpt-4o" {
 		t.Fatalf("capabilities = %+v", caps)
 	}
-	if !caps.SupportsTools || !caps.SupportsStreaming || !caps.SupportsReasoning {
-		t.Fatalf("expected capability flags: %+v", caps)
+	if caps.MaxContextTokens != 128_000 || caps.MaxOutputTokens != 16_384 {
+		t.Fatalf("limits = %+v", caps)
 	}
-	if caps.MaxContextTokens != 0 {
-		t.Fatalf("MaxContextTokens = %d, want unknown 0", caps.MaxContextTokens)
+	if !caps.SupportsTools || !caps.SupportsStreaming || caps.SupportsReasoning {
+		t.Fatalf("expected gpt-4o tools+stream without advertised reasoning: %+v", caps)
+	}
+	if caps.AllowedReasoningValues != nil {
+		t.Fatalf("AllowedReasoningValues = %#v, want nil", caps.AllowedReasoningValues)
+	}
+
+	alias := openai.ChatModel{Model: "gpt-4o-2024-08-06", APIKey: "k"}
+	capsAlias, _ := goagent.ModelCapabilitiesOf(alias)
+	if capsAlias.MaxContextTokens != caps.MaxContextTokens || capsAlias.MaxOutputTokens != caps.MaxOutputTokens {
+		t.Fatalf("alias limits mismatch: %+v vs %+v", capsAlias, caps)
+	}
+}
+
+func TestChatModelModelCapabilitiesKnownReasoningModel(t *testing.T) {
+	m := openai.ChatModel{Model: "o3-mini", APIKey: "test-key"}
+	caps, ok := goagent.ModelCapabilitiesOf(m)
+	if !ok {
+		t.Fatal("expected ChatModel to implement ModelCapabilitiesProvider")
+	}
+	if caps.MaxContextTokens != 200_000 || caps.MaxOutputTokens != 100_000 {
+		t.Fatalf("limits = %+v", caps)
+	}
+	if !caps.SupportsReasoning {
+		t.Fatal("expected SupportsReasoning for o3-mini")
+	}
+	wantEfforts := []string{"low", "medium", "high"}
+	if !slices.Equal(caps.AllowedReasoningValues, wantEfforts) {
+		t.Fatalf("AllowedReasoningValues = %#v, want %v", caps.AllowedReasoningValues, wantEfforts)
+	}
+}
+
+func TestChatModelModelCapabilitiesUnknownModelNoInventedFacts(t *testing.T) {
+	m := openai.ChatModel{Model: "gpt-custom-unknown", APIKey: "test-key"}
+	caps, ok := goagent.ModelCapabilitiesOf(m)
+	if !ok {
+		t.Fatal("expected ChatModel to implement ModelCapabilitiesProvider")
+	}
+	if caps.Provider != "openai-compatible" || caps.ModelID != "gpt-custom-unknown" {
+		t.Fatalf("capabilities = %+v", caps)
+	}
+	if caps.MaxContextTokens != 0 || caps.MaxOutputTokens != 0 {
+		t.Fatalf("expected zero limits for unknown model: %+v", caps)
+	}
+	if caps.SupportsTools || caps.SupportsStreaming || caps.SupportsReasoning {
+		t.Fatalf("expected false capability flags for unknown model: %+v", caps)
+	}
+	if len(caps.AllowedReasoningValues) != 0 {
+		t.Fatalf("AllowedReasoningValues = %#v, want empty", caps.AllowedReasoningValues)
 	}
 }
 

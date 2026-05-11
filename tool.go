@@ -9,15 +9,17 @@ import (
 )
 
 var (
-	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	stringType  = reflect.TypeOf("")
+	contextType    = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errorType      = reflect.TypeOf((*error)(nil)).Elem()
+	stringType     = reflect.TypeOf("")
+	toolResultType = reflect.TypeOf(ToolResult{})
 )
 
 // NewTool adapts a supported Go function into a Tool.
 //
-// Supported function shapes are func(context.Context, string) (string, error)
-// and func(context.Context, T) (string, error), where T is a struct input.
+// Supported function shapes are func(context.Context, string) (R, error)
+// and func(context.Context, T) (R, error), where T is a struct input and R is
+// string, ToolResult, *ToolResult, or another JSON-serializable value.
 func NewTool(name, description string, fn any) (Tool, error) {
 	return newTool(name, description, nil, ToolSafety{}, ToolConstraints{}, fn)
 }
@@ -58,13 +60,14 @@ func newTool(name, description string, explicitSchema ToolSchema, safety ToolSaf
 	}
 
 	spec := ToolSpec{Name: name, Description: description, Schema: cloneToolSchema(schema), Safety: safety, Constraints: constraints}
-	return functionTool{spec: spec, fn: toolFn.fn, inputType: toolFn.inputType}, nil
+	return functionTool{spec: spec, fn: toolFn.fn, inputType: toolFn.inputType, resultType: toolFn.resultType}, nil
 }
 
 type functionTool struct {
-	spec      ToolSpec
-	fn        reflect.Value
-	inputType reflect.Type
+	spec       ToolSpec
+	fn         reflect.Value
+	inputType  reflect.Type
+	resultType reflect.Type
 }
 
 func (t functionTool) Name() string { return t.spec.Name }
@@ -109,8 +112,9 @@ func validateToolDefinition(definition ToolDefinition) error {
 }
 
 type toolFunc struct {
-	fn        reflect.Value
-	inputType reflect.Type
+	fn         reflect.Value
+	inputType  reflect.Type
+	resultType reflect.Type
 }
 
 func parseToolFunc(name string, fn any) (toolFunc, error) {
@@ -123,7 +127,7 @@ func parseToolFunc(name string, fn any) (toolFunc, error) {
 	if typ.Kind() != reflect.Func || typ.NumIn() != 2 || typ.NumOut() != 2 {
 		return toolFunc{}, unsupportedToolFuncError(name)
 	}
-	if !typ.In(0).Implements(contextType) || typ.Out(0) != stringType || !typ.Out(1).Implements(errorType) {
+	if !typ.In(0).Implements(contextType) || !typ.Out(1).Implements(errorType) {
 		return toolFunc{}, unsupportedToolFuncError(name)
 	}
 
@@ -132,11 +136,11 @@ func parseToolFunc(name string, fn any) (toolFunc, error) {
 		return toolFunc{}, unsupportedToolFuncError(name)
 	}
 
-	return toolFunc{fn: value, inputType: inputType}, nil
+	return toolFunc{fn: value, inputType: inputType, resultType: typ.Out(0)}, nil
 }
 
 func unsupportedToolFuncError(name string) error {
-	return fmt.Errorf("goagent: tool %q function must have signature func(context.Context, string|struct) (string, error)", name)
+	return fmt.Errorf("goagent: tool %q function must have signature func(context.Context, string|struct) (string|ToolResult|JSON-serializable, error)", name)
 }
 
 func validateToolName(name string) error {

@@ -55,10 +55,15 @@ type RunRequest struct {
 	MaxSteps int
 	// Instructions overrides Agent.Instructions for this run when non-empty.
 	Instructions string
-	// ToolNames selects which Agent-registered tools are visible for this run.
-	// nil uses all Agent tools; an empty non-nil slice exposes no tools; each
-	// listed name must exist on the Agent or Run/Stream returns an error before
-	// the run starts.
+	// Tools replaces Agent.Tools for this run when non-nil. A nil slice keeps
+	// Agent.Tools as the effective base set; an empty non-nil slice exposes no
+	// callable tools. Run-scoped tools must not share names with Agent.Tools;
+	// conflicts return an error before model work starts.
+	Tools []Tool
+	// ToolNames selects tools from the effective base set visible for this run.
+	// nil uses all effective tools; an empty non-nil slice exposes no tools; each
+	// listed name must exist in the effective set or Run/Stream returns an error
+	// before the run starts.
 	ToolNames []string
 	// Limits applies optional run-level bounds. Zero-valued fields are ignored.
 	Limits RunLimits
@@ -203,7 +208,11 @@ type ToolSafety struct {
 
 // ToolConstraints carries runtime-relevant execution constraints for a tool.
 type ToolConstraints struct {
-	Timeout        time.Duration
+	Timeout time.Duration
+	// MaxOutputBytes caps model-visible helper output for NewTool,
+	// NewToolWithSchema, and NewToolFromDefinition function adapters. For
+	// text results it counts Content bytes; for structured results it also
+	// counts the JSON encoding of ToolResult.JSON. Zero means no per-call cap.
 	MaxOutputBytes int
 	// MaxProgressEvents caps EventToolProgress emissions per streaming invocation.
 	// Zero means the runner default (1024).
@@ -476,8 +485,11 @@ const (
 
 // Decision describes an action that policy can allow, deny, or constrain.
 type Decision struct {
-	Kind       DecisionKind
-	Request    RunRequest
+	Kind    DecisionKind
+	Request RunRequest
+	// Tools carries the effective ordered model-visible tool descriptions for a
+	// run-start decision.
+	Tools      []ToolSpec
 	ToolCall   ToolCall
 	Tool       ToolSpec
 	ToolResult ToolResult

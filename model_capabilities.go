@@ -3,6 +3,8 @@ package goagent
 // ModelCapabilities carries optional static hints about a Model implementation.
 // Values are best-effort; zero values mean unknown or not applicable unless the
 // boolean field itself carries the fact (for example SupportsTools false).
+// Adapters may leave numeric limits and flags at zero when the selected model
+// is not covered by a curated facts table so hosts never receive invented limits.
 type ModelCapabilities struct {
 	// Provider names the integration family (for example "openai-compatible").
 	Provider string
@@ -10,12 +12,17 @@ type ModelCapabilities struct {
 	ModelID string
 	// MaxContextTokens is a soft context-window hint when known; zero means unknown.
 	MaxContextTokens int
+	// MaxOutputTokens is a soft max-completion hint when known; zero means unknown.
+	MaxOutputTokens int
 	// SupportsTools reports whether tool definitions can be passed on turns.
 	SupportsTools bool
 	// SupportsStreaming reports whether incremental model output is supported.
 	SupportsStreaming bool
 	// SupportsReasoning reports whether reasoning controls exist for this integration.
 	SupportsReasoning bool
+	// AllowedReasoningValues lists documented reasoning control values (for example
+	// reasoning_effort strings) when known; nil or empty means unknown or none advertised.
+	AllowedReasoningValues []string
 }
 
 // ModelCapabilitiesProvider is an optional Model extension for host introspection.

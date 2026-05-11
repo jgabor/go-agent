@@ -1,0 +1,120 @@
+header:
+  level: full
+  created: 2026-05-11
+  status: completed
+  reviewed: 2026-05-11
+  critic_issues: "7 found, 7 addressed, 0 dismissed"
+  title: "Plan: Complete Aila Runtime Gap Follow-ups"
+what: >-
+  Bring the partially addressed Aila runtime gaps to their intended
+  library-core shape by finishing rich helper authoring, selected-model
+  capability facts, policy cancellation classification, and full run-scoped
+  tool exposure. GA-AILA-006 remains deferred as separate provider-adapter work.
+why: >-
+  Aila needs approval UI cancellation, model header facts, model selection,
+  phase-specific tool exposure, and structured tool outputs without duplicating
+  go-agent runtime seams or maintaining private workarounds for behavior that
+  can be exposed as generic runtime primitives.
+constraints: >-
+  Preserve go-agent as a library-first runtime. Do not add a go-agent CLI, TUI,
+  workflow DSL, hosted platform, provider marketplace, credential discovery,
+  product config loading, pricing/cost ownership, Aila FSM behavior, Aila
+  artifact resolution, or built-in coding-agent tools. Keep existing simple
+  helper signatures and registered-tool-only use cases working. Capability
+  metadata must describe selected adapter/model facts, not a global catalog.
+scope:
+  included:
+    - GA-AILA-005 helper authoring for rich tool results and structured outputs.
+    - GA-AILA-007 selected-model capability facts, including known context and output limits where safely known.
+    - GA-AILA-003 policy wait cancellation and deadline stop classification across policy decision paths.
+    - GA-AILA-001 run-scoped tool exposure beyond fixed registered subsets, with policy-visible effective tool specs.
+    - Public docs, examples if affected, gap status correction, project-state freshness, and local verification.
+  excluded:
+    - Aila CLI, TUI, FSM, config, artifact resolver, permission UI, capability adapters, or model-selection UX.
+    - Provider credential discovery, token exchange, account selection, pricing, model marketplace, or global provider registry.
+    - Built-in implementations of shell, edit, fetch, grep, MCP, or sub-agent orchestration behavior.
+    - Broad compatibility shims for unshipped branch-only behavior when a clean replacement is clearer.
+  deferred:
+    - GA-AILA-006 additional provider adapters until a separate provider-specific plan exists.
+    - OpenAI Realtime or other non-SSE protocols unless they can honor the existing streaming runtime contract.
+    - Host-owned model catalogs for pricing, availability, account policy, or product presentation beyond selected-model hints.
+design: >-
+  Finish the runtime seams in reviewable slices. First make helper-authored
+  tools able to return rich and structured outputs without forcing authors into
+  custom Tool implementations. Then fix policy wait cancellation so approval UI
+  blocking does not masquerade as denial. Next complete run-scoped tool exposure
+  with explicit conflict and visibility semantics so it does not become an
+  implicit plugin marketplace. Finally expand model capability hints in a small,
+  selected-adapter table with unknown fallbacks. Documentation and status claims
+  move last, after behavior is covered by tests.
+tasks:
+  - number: 1
+    name: Complete rich helper result authoring
+    depends_on: []
+    status: completed
+    acceptance:
+      - GIVEN a simple helper returns plain text WHEN it is used by a host THEN existing text-only behavior remains unchanged.
+      - GIVEN a helper returns a rich tool outcome WHEN the tool completes THEN text, structured data, source facts, truncation facts, and opaque host facts are preserved for events and replay.
+      - GIVEN a helper returns structured data directly WHEN the tool completes THEN the model-visible result contains structured data without forcing a custom tool implementation.
+      - GIVEN a helper returns unsupported or unreplayable data WHEN the runtime prepares the result THEN the run fails with an actionable tool-result error instead of writing unsafe history.
+      - GIVEN output-size limits are active WHEN text or structured helper output exceeds the bound THEN the limit behavior is documented and enforced consistently.
+    test_proportionality: "One passing and one failing test per supported helper return family."
+  - number: 2
+    name: Classify policy wait cancellation correctly
+    depends_on: []
+    status: completed
+    acceptance:
+      - GIVEN policy is waiting for a run-start decision WHEN the run context is canceled THEN the run stops as canceled rather than policy-denied.
+      - GIVEN policy is waiting for a retry decision WHEN the run context is canceled THEN the retry observation reports cancellation rather than denial.
+      - GIVEN policy is waiting for a tool-call decision WHEN the run context is canceled THEN the run stops as canceled rather than policy-denied.
+      - GIVEN policy is waiting for a tool-result decision WHEN the run context is canceled THEN the run stops as canceled rather than policy-denied.
+      - GIVEN policy is waiting for a stop decision WHEN the runtime duration limit expires THEN the final stop classification remains duration-limited rather than policy-denied.
+    test_proportionality: "One canceled and one duration-limited case across the policy decision paths where each applies."
+  - number: 3
+    name: Complete run-scoped tool exposure
+    depends_on: [1]
+    status: completed
+    acceptance:
+      - GIVEN a host supplies tools for one run WHEN the model turn starts THEN the model sees the effective run tool set for that run only.
+      - GIVEN a host supplies no tools for one run WHEN the model turn starts THEN the model receives no callable tools for that run.
+      - GIVEN registered tools and one-run tools contain overlapping names WHEN the run is prepared THEN the runtime either rejects the conflict or applies a documented deterministic rule.
+      - GIVEN run-start policy evaluates a run WHEN tools are visible for that run THEN policy receives the effective ordered tool descriptions including safety and constraint facts.
+      - GIVEN a one-run tool is used WHEN a later run starts without it THEN the later run cannot call or see that tool.
+    test_proportionality: "One passing and one failing test for replacement, empty, conflict, and non-leakage behavior."
+  - number: 4
+    name: Expand selected-model capability facts
+    depends_on: []
+    status: completed
+    acceptance:
+      - GIVEN a known selected OpenAI-compatible model WHEN a host asks for capabilities THEN context window, max output, streaming support, tool support, reasoning support, and allowed reasoning values are available when known.
+      - GIVEN an unknown selected model WHEN a host asks for capabilities THEN unknown facts remain zero or empty without causing an error.
+      - GIVEN a model does not expose capabilities WHEN a host checks for them THEN the base streaming model contract remains valid.
+      - GIVEN capability facts become stale or incomplete WHEN a model is not in the selected-adapter table THEN the runtime does not invent values.
+      - GIVEN a host needs pricing, account availability, aliases, or product display names WHEN presenting models THEN those facts remain host-owned.
+    test_proportionality: "Known model, unknown model, nil model, and non-capability model coverage."
+  - number: 5
+    name: Refresh public docs and gap status
+    depends_on: [1, 2, 3, 4]
+    status: completed
+    acceptance:
+      - GIVEN the follow-up behavior lands WHEN the Aila gap document is read THEN GA-AILA-001, GA-AILA-003, GA-AILA-005, and GA-AILA-007 distinguish addressed, partial, and deferred sub-scope accurately.
+      - GIVEN GA-AILA-006 remains deferred WHEN roadmap text is read THEN additional provider adapters are not implied to be complete.
+      - GIVEN public API docs are read WHEN hosts adopt the runtime THEN helper returns, policy cancellation, run-scoped tools, and capability hints are described without Aila-specific product assumptions.
+      - GIVEN examples or README snippets mention these surfaces WHEN they are checked THEN they stay runnable and consistent with repository reality.
+      - GIVEN status artifacts are updated WHEN the plan is near completion THEN completed work is not claimed before tests prove it.
+  - number: 6
+    name: Plan-level freshness checkpoint
+    depends_on: [1, 2, 3, 4, 5]
+    status: completed
+    acceptance:
+      - GIVEN all implementation tasks are complete WHEN the local verification gate runs THEN the full project check succeeds or exact blockers are recorded.
+      - GIVEN the plan has finished WHEN project state is refreshed THEN changelog, TODOs, progress, and active plan status match repository reality.
+      - GIVEN a maintainer reviews the final diff WHEN checking project boundaries THEN go-agent still does not own Aila product behavior, model marketplace behavior, provider credential behavior, pricing, or built-in coding-agent tools.
+      - GIVEN another host embeds go-agent WHEN it ignores the new optional surfaces THEN existing runtime behavior remains compatible.
+overall_acceptance:
+  - GIVEN Aila embeds go-agent as its runtime foundation WHEN it needs rich helper results, policy wait cancellation, selected-model facts, and one-run tool exposure THEN those needs are served by generic runtime primitives.
+  - GIVEN existing callers use only the current simple helper, fixed registry, and base model surfaces WHEN they upgrade THEN their behavior remains compatible.
+  - GIVEN the Aila gap document is reviewed after completion WHEN comparing claims to code THEN GA-AILA-001, GA-AILA-003, GA-AILA-005, GA-AILA-006, and GA-AILA-007 accurately reflect repository reality.
+surprises:
+  - The critic flagged run-scoped unregistered tools as the highest-risk boundary because it can become a hidden plugin registry. The plan now requires explicit conflict, visibility, ordering, and non-leakage semantics.
+  - The critic flagged model capability hints as a stale-catalog risk. The plan now limits them to selected-adapter facts with unknown fallbacks and keeps product catalogs host-owned.

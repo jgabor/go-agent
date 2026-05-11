@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- Refreshed `docs/aila-gap-feature-requests.md` resolution matrix and README/AGENTS host-oriented notes for per-run tools, policy cancel vs deny, capability facts, and deferred non-OpenAI providers (no new runtime promises).
+- Archived completed Planera snapshot for Complete Aila Runtime Gap Follow-ups and removed active `.agentera/plan.yaml` after Task 6 `mage check`.
+
 ### Added
 
 - Runtime seams for downstream hosts: per-run instructions and registered-tool subset (`ToolNames`), aggregate `RunLimits`, versioned JSON event persistence with optional run correlation fields, policy pending events and recoverable tool-call denials, rich `ToolResult` facts with validation, optional `StreamingTool` progress events, and optional `ModelCapabilitiesOf` hints (`openai.ChatModel`).

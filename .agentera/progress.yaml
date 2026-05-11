@@ -1,4 +1,188 @@
 cycles:
+  - number: 62
+    timestamp: "2026-05-11"
+    type: process
+    phase: build
+    what: Completed PLAN Task 6 (Plan-level freshness checkpoint) for Complete Aila Runtime Gap Follow-ups — `mage check`, project state refresh, Planera archival per finished-plan convention.
+    commit: "Uncommitted per user instruction"
+    inspiration: An active plan.yaml should not linger after all tasks complete; the checkpoint records verification and aligns changelog, TODO, and progress with repository reality.
+    discovered: None beyond confirming cycles 60–61 left Task 6 and active plan pending until this closure.
+    verified: >-
+      Task 6 acceptance: `mage check` exited 0 (ok github.com/jgabor/go-agent,
+      examples/cli, service, worker, providers/openai; examples/minimal no test
+      files; golangci-lint "0 issues."; govulncheck clean). Archived completed
+      plan to
+      `.agentera/archive/plan-2026-05-11-complete-aila-runtime-gap-followups.yaml`
+      with header.status completed and Tasks 1–6 completed; deleted stale active
+      `.agentera/plan.yaml`. Appended CHANGELOG [Unreleased] Documentation line
+      for plan archival; added TODO.md Done line for this follow-ups plan closure.
+    next: No active Planera plan until a new plan is authored.
+    context:
+      intent: Task 6 only — close Complete Aila Runtime Gap Follow-ups plan.
+      constraints: No git commit/stage/push.
+      scope: .agentera/plan archive, progress.yaml, TODO.md, CHANGELOG.md.
+  - number: 61
+    timestamp: "2026-05-11"
+    type: docs
+    phase: build
+    what: Task 5 inspektera retry after CONDITIONAL PASS — accurate CHANGELOG wording in progress cycle 60 verified, GA-AILA-007 sketch-vs-shipped clarification, mage check.
+    commit: "Uncommitted per user instruction"
+    inspiration: Verified text must not overstate CHANGELOG [Unreleased] scope; gap doc skimmers need one explicit shipped-API vs proposal naming line.
+    discovered: Inspektera flagged an overstated CHANGELOG-only line in cycle 60 verified and skimmer confusion between proposal names and shipped capability API in GA-AILA-007.
+    verified: >-
+      .agentera/progress.yaml cycle 60 verified now describes CHANGELOG [Unreleased]
+      as adding a Documentation bullet for the doc refresh alongside existing
+      Added/Changed runtime entries (not doc-only). docs/aila-gap-feature-requests.md
+      GA-AILA-007 **Resolution** adds a **Shipped names** sentence distinguishing
+      `ModelCapabilitiesProvider` / `ModelCapabilitiesOf` from the
+      `CapabilityModel` / `Capabilities(ctx)` sketch. Full local gate:
+      `mage check` exited 0 with ok github.com/jgabor/go-agent (cached), ok
+      github.com/jgabor/go-agent/examples/cli (cached), ? examples/minimal [no
+      test files], ok examples/service and examples/worker and providers/openai
+      (cached), "0 issues.", "No vulnerabilities found."
+    next: PLAN Task 6 Plan-level freshness checkpoint remains pending.
+    context:
+      intent: Minimal surgical retry for Task 5 conditional pass per user.
+      constraints: No git commit/stage/push; no scope creep.
+      scope: .agentera/progress.yaml, docs/aila-gap-feature-requests.md GA-AILA-007.
+  - number: 60
+    timestamp: "2026-05-11"
+    type: docs
+    phase: build
+    what: Completed PLAN Task 5 (Refresh public docs and gap status) aligning gap resolution matrix, README roadmap deferrals, AGENTS Current Reality, TODO deferred providers, and CHANGELOG documentation note with Tasks 1–4 behavior.
+    commit: "Uncommitted per user instruction"
+    inspiration: Public docs must not over-claim provider coverage or full GA-AILA-003 UI hints while naming the real run tool and policy contracts hosts rely on.
+    discovered: GA-AILA-003 remains partial at the library boundary because optional Decision.Display never shipped; cancel-vs-deny semantics are the other half of host-visible policy lifecycle.
+    verified: >-
+      docs/aila-gap-feature-requests.md gap summary and “Status after go-agent”
+      matrix subsection now distinguish Addressed vs Partial (001/003/005/007) and
+      Deferred (006); GA-AILA-001/005/007 sections include Resolution headers
+      pointing at api.go/runner.go/tool/model_facts. README.md Providers &
+      Models states only OpenAI SSE is in-tree; Features & Roadmap adds explicit
+      Deferred row for more adapters and expands Policy hooks / run overrides
+      evidence columns; Policy Hooks section documents cancel/duration vs denial.
+      AGENTS.md Current Reality covers RunRequest.Tools + ToolNames conflict
+      semantics, policy cancel classification, helper ToolResult, and model_facts.
+      TODO.md Deferred lists GA-AILA-006. CHANGELOG [Unreleased] adds a
+      Documentation bullet for the gap-doc/README/AGENTS refresh under
+      [Unreleased] alongside pre-existing Added/Changed runtime history (not
+      doc-only). Examples packages unchanged; verification: go test
+      ./examples/... and mage check (full gate).
+    next: PLAN Task 6 Plan-level freshness checkpoint remains pending.
+    context:
+      intent: Task 5 only from Complete Aila Runtime Gap Follow-ups plan.
+      constraints: No git commit/stage/push unless user asks; no unverified capability claims.
+      scope: docs/aila-gap-feature-requests.md, README.md, AGENTS.md, TODO.md, CHANGELOG.md, .agentera/plan.yaml, this progress entry.
+  - number: 59
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 4 (Expand selected-model capability facts) with curated OpenAI Chat Completions model facts, unknown-model zero fallbacks, and extended ModelCapabilities fields.
+    commit: "Uncommitted per task constraint"
+    inspiration: Hosts need compaction and UI facts for the selected adapter/model pair without a global catalog or invented limits when an ID is absent from the adapter table.
+    discovered: Claiming tools/streaming/reasoning for every ChatModel ID overstated model facts; the adapter now distinguishes integration identity from tabulated per-model limits.
+    verified: >-
+      Acceptance 1 is covered by TestChatModelModelCapabilitiesKnownOpenAIModel
+      (gpt-4o context/output limits, tools and streaming true, reasoning unset)
+      and TestChatModelModelCapabilitiesKnownReasoningModel (o3-mini limits,
+      SupportsReasoning, AllowedReasoningValues low/medium/high). Acceptance 2 is
+      covered by TestChatModelModelCapabilitiesUnknownModelNoInventedFacts (zeros,
+      false flags, empty reasoning list, no error) and TestModelCapabilitiesOfNil
+      (nil model reports no capabilities). Acceptance 3 is covered by
+      TestModelCapabilitiesOfAbsent plus TestSimpleModelAdapterStreamsWithoutCapabilityProvider
+      (ModelFromSimple streams successfully without ModelCapabilitiesProvider).
+      Acceptance 4 is covered by the unknown-model test asserting zero limits and
+      false flags when the ID is missing from providers/openai/model_facts.go.
+      Acceptance 5 is covered by README Providers paragraph stating pricing,
+      availability, aliases, and display names remain host-owned, plus package
+      comments on model_facts.go. Verification passed with go test ./... and mage check.
+    next: PLAN Task 5 Refresh public docs and gap status remains pending.
+    context:
+      intent: Execute only Task 4 from the Complete Aila Runtime Gap Follow-ups plan via realisera.
+      constraints: No commits, staging, pushes, CLI/TUI/marketplace/pricing in core, vision.yaml untouched.
+      scope: model_capabilities.go, providers/openai/model_facts.go, providers/openai/openai.go, tests, README surgical, plan task status, this progress entry.
+  - number: 58
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 3 (Complete run-scoped tool exposure) by adding explicit per-run replacement tools, empty-tool exposure, conflict rejection, policy-visible effective specs, and non-leakage tests.
+    commit: "Uncommitted per task constraint"
+    inspiration: Aila phase-specific tools need a generic go-agent runtime primitive without turning the runtime into a hidden plugin registry.
+    discovered: The existing ToolNames selector already modeled effective visibility; the missing piece was a run-owned replacement base set plus run-start policy access to the ordered ToolSpec list.
+    verified: >-
+      Acceptance 1 is covered by TestRunScopedToolsReplaceRegisteredTools:
+      RunRequest.Tools replaces Agent.Tools for that run, the model sees only
+      the ephemeral tool, and the tool result is fed back to the next model turn.
+      Acceptance 2 is covered by TestRunScopedEmptyToolsExposeNoTools, including
+      a completing model turn with no visible tools and a failing hidden
+      registered-tool call that stops with StopToolError. Acceptance 3 is covered
+      by TestRunScopedToolNameConflictReturnsError, which rejects a run-scoped
+      tool whose name overlaps an Agent tool before any model call. Acceptance 4
+      is covered by TestRunStartPolicyReceivesEffectiveRunScopedToolSpecs, which
+      asserts ordered run-start Decision.Tools include safety and constraint
+      metadata and appear on the policy-pending event. Acceptance 5 is covered by
+      TestRunScopedToolsDoNotLeakToLaterRuns, where an ephemeral tool succeeds in
+      one run, then a later run without it sees only registered tools and cannot
+      call the ephemeral name. Verification passed with go test ./... and mage check.
+    next: PLAN Task 4 Expand selected-model capability facts remains pending.
+    context:
+      intent: Execute only Task 3 from the Complete Aila Runtime Gap Follow-ups plan via realisera.
+      constraints: No commits, staging, pushes, or scope creep into model capabilities, docs gap status, plan freshness, CLI, TUI, workflow DSL, or Aila product behavior.
+      scope: RunRequest tool exposure, runner tool preparation, run-start policy payloads, focused runner tests, plan task status, and this progress entry.
+  - number: 57
+    timestamp: "2026-05-11"
+    type: fix
+    phase: build
+    what: Completed PLAN Task 2 (Classify policy wait cancellation correctly) by mapping policy wait context cancellation to canceled or duration-limited stops instead of policy denial.
+    commit: "Uncommitted per task constraint"
+    inspiration: Approval UI waits should not make user cancellation, retry cancellation, or runtime duration expiry look like policy refusal.
+    discovered: Policy.Decide context errors were already observable at every call site, but run-start, tool-call, tool-result, retry, and stop handling all defaulted policy errors to StopPolicyDenied.
+    verified: >-
+      Acceptance 1 is covered by TestRunnerClassifiesCanceledPolicyWaits/run_start:
+      a run-start policy wait cancels the run context before any model call and
+      stops with StopCanceled, with no policy-denied stop. Acceptance 2 is covered
+      by TestRunnerClassifiesCanceledPolicyWaits/retry: retry policy wait
+      cancellation returns context.Canceled and emits a RetryOutcomeCanceled
+      observation with StopCanceled rather than RetryOutcomeDenied. Acceptance 3 is
+      covered by TestRunnerClassifiesCanceledPolicyWaits/tool_call: tool-call
+      policy wait cancellation stops with StopCanceled and no policy-denied stop.
+      Acceptance 4 is covered by TestRunnerClassifiesCanceledPolicyWaits/tool_result:
+      tool-result policy wait cancellation stops with StopCanceled and no
+      policy-denied stop. Acceptance 5 is covered by
+      TestRunLimitsMaxDurationDuringStopPolicyWait: a stop policy wait observes
+      RunLimits.MaxDuration promptly and finishes with StopDurationLimit rather
+      than StopPolicyDenied. Verification passed with go test ./... and mage check.
+    next: PLAN Task 3 Complete run-scoped tool exposure remains pending.
+    context:
+      intent: Execute only Task 2 from the Complete Aila Runtime Gap Follow-ups plan via realisera.
+      constraints: No commits, staging, pushes, or scope creep into run-scoped tools, model capabilities, docs gap status, plan freshness, CLI, TUI, workflow DSL, or Aila product behavior.
+      scope: runner policy error classification, focused runner tests, plan task status, and this progress entry.
+  - number: 56
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 1 (Complete rich helper result authoring) by extending NewTool helpers to author text, rich ToolResult, and direct structured results.
+    commit: "Uncommitted per retry constraint"
+    inspiration: The current follow-up plan needs hosts to preserve rich helper outcomes without forcing custom Tool implementations or unsafe replay history.
+    discovered: The missing evidence was artifact freshness, not a new implementation gap; the latest progress entry still pointed at the previous Aila Runtime Gap Features plan.
+    verified: >-
+      Plain text helper behavior remains covered by TestNewToolAdaptsContextStringFunction
+      and the existing MaxOutputBytes text failure test TestToolDefinitionEnforcesOutputConstraint.
+      Rich helper outcomes are covered by TestNewToolAdaptsRichToolResultFunctionAndPreservesReplay,
+      which preserves Content, JSON, Metadata, Truncated, OriginalBytes, Compressed,
+      CompressionKind, SourceRef, and Opaque through events and MarshalEvents/UnmarshalEvents;
+      TestNewToolRejectsUnreplayableRichToolResultAtRuntime proves unsupported JSON
+      fails with a tool "result invalid" error and no unsafe EventToolResult. Direct
+      structured helper output is covered by TestNewToolAdaptsStructuredResultFunction,
+      and structured output limits by TestToolDefinitionEnforcesOutputConstraintForStructuredResult.
+      ToolConstraints.MaxOutputBytes documents that helper text counts Content bytes and
+      structured helper output also counts encoded ToolResult.JSON bytes. Verification
+      rerun for this retry passed with go test ./....
+    next: PLAN Task 2 Classify policy wait cancellation correctly remains pending.
+    context:
+      intent: Satisfy the current-plan Task 1 presence check with concrete acceptance evidence.
+      constraints: No commits, staging, pushes, unrelated reverts, or scope creep into Tasks 2-6.
+      scope: .agentera/progress.yaml latest cycle evidence only; implementation and tests were already present.
   - number: 55
     timestamp: "2026-05-11"
     type: docs

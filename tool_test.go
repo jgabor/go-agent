@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,164 @@ func TestNewToolAdaptsStructInputFunctionAndGeneratesSchema(t *testing.T) {
 	}
 	if result.Content != "Austin forecast" {
 		t.Fatalf("Content = %q", result.Content)
+	}
+}
+
+func TestNewToolAdaptsRichToolResultFunctionAndPreservesReplay(t *testing.T) {
+	tool, err := goagent.NewTool("weather", "Get rich weather.", func(context.Context, string) (goagent.ToolResult, error) {
+		return goagent.ToolResult{
+			Content:         "clear",
+			JSON:            map[string]any{"temp_c": float64(27), "ok": true},
+			Metadata:        map[string]string{"unit": "metric"},
+			Truncated:       true,
+			OriginalBytes:   4096,
+			Compressed:      true,
+			CompressionKind: "gzip",
+			SourceRef:       "blob://forecast/1",
+			Opaque:          map[string]any{"exitCode": float64(0), "host": "test"},
+		}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runResult, err := runner.Run(context.Background(), goagent.RunRequest{Input: "weather"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runResult.StopReason != goagent.StopComplete {
+		t.Fatalf("StopReason = %q, want complete", runResult.StopReason)
+	}
+	var got goagent.ToolResult
+	for _, event := range runResult.Events {
+		if event.Kind == goagent.EventToolResult {
+			got = event.ToolResult
+			break
+		}
+	}
+	want := goagent.ToolResult{
+		CallID: "call-1", Name: "weather", Content: "clear",
+		JSON:            map[string]any{"temp_c": float64(27), "ok": true},
+		Metadata:        map[string]string{"unit": "metric"},
+		Truncated:       true,
+		OriginalBytes:   4096,
+		Compressed:      true,
+		CompressionKind: "gzip",
+		SourceRef:       "blob://forecast/1",
+		Opaque:          map[string]any{"exitCode": float64(0), "host": "test"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("tool result = %+v, want %+v", got, want)
+	}
+	data, err := goagent.MarshalEvents(runResult.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := goagent.UnmarshalEvents(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range replayed {
+		if event.Kind == goagent.EventToolResult {
+			if !reflect.DeepEqual(event.ToolResult, want) {
+				t.Fatalf("replayed tool result = %+v, want %+v", event.ToolResult, want)
+			}
+			return
+		}
+	}
+	t.Fatal("missing replayed tool result")
+}
+
+func TestNewToolRejectsUnreplayableRichToolResultAtRuntime(t *testing.T) {
+	tool, err := goagent.NewTool("weather", "Get rich weather.", func(context.Context, string) (goagent.ToolResult, error) {
+		return goagent.ToolResult{JSON: map[string]any{"bad": make(chan int)}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := &recordingModel{turns: []goagent.TurnResult{{
+		ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}},
+	}}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runResult, err := runner.Run(context.Background(), goagent.RunRequest{Input: "weather"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runResult.StopReason != goagent.StopToolError {
+		t.Fatalf("StopReason = %q, want tool_error", runResult.StopReason)
+	}
+	var sawActionableError bool
+	for _, event := range runResult.Events {
+		if event.Kind == goagent.EventToolResult {
+			t.Fatalf("unsafe result was emitted: %+v", event)
+		}
+		if event.Kind == goagent.EventError && event.Err != nil {
+			if !strings.Contains(event.Err.Error(), "tool \"weather\" result invalid") {
+				t.Fatalf("error = %v, want actionable tool result error", event.Err)
+			}
+			sawActionableError = true
+		}
+	}
+	if !sawActionableError {
+		t.Fatal("missing actionable tool result error")
+	}
+}
+
+func TestNewToolAdaptsStructuredResultFunction(t *testing.T) {
+	type forecast struct {
+		City  string `json:"city"`
+		Temps []int  `json:"temps"`
+	}
+	tool, err := goagent.NewTool("weather", "Get structured weather.", func(context.Context, string) (forecast, error) {
+		return forecast{City: "Austin", Temps: []int{27, 29}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := tool.Call(context.Background(), goagent.ToolCall{
+		ID:    "call-1",
+		Name:  "weather",
+		Input: json.RawMessage(`{"city":"Austin"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"city": "Austin", "temps": []any{float64(27), float64(29)}}
+	if result.Content != "" || !reflect.DeepEqual(result.JSON, want) {
+		t.Fatalf("ToolResult = %+v, want structured JSON %+v", result, want)
+	}
+}
+
+func TestToolDefinitionEnforcesOutputConstraintForStructuredResult(t *testing.T) {
+	tool, err := goagent.NewToolFromDefinition(goagent.ToolDefinition{
+		Name:        "weather",
+		Description: "Get structured weather.",
+		Schema:      goagent.ToolSchema{"type": "object"},
+		Function: func(context.Context, string) (map[string]any, error) {
+			return map[string]any{"forecast": "clear"}, nil
+		},
+		Constraints: goagent.ToolConstraints{MaxOutputBytes: 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = tool.Call(context.Background(), goagent.ToolCall{Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)})
+	if err == nil || !strings.Contains(err.Error(), "max output bytes") {
+		t.Fatalf("Call error = %v, want max output bytes error", err)
 	}
 }
 
@@ -218,7 +377,7 @@ func TestNewToolFromDefinitionRejectsInvalidMetadata(t *testing.T) {
 		{name: "negative progress events", mutate: func(def *goagent.ToolDefinition) { def.Constraints.MaxProgressEvents = -1 }, wantErr: "max progress events cannot be negative", wantPrefix: "invalid tool definition"},
 		{name: "bad function", mutate: func(def *goagent.ToolDefinition) {
 			def.Function = func(context.Context) (string, error) { return "", nil }
-		}, wantErr: "func(context.Context, string|struct) (string, error)"},
+		}, wantErr: "func(context.Context, string|struct) (string|ToolResult|JSON-serializable, error)"},
 	}
 
 	for _, tt := range tests {
@@ -277,7 +436,7 @@ func TestNewToolRejectsUnsupportedFunctionShapes(t *testing.T) {
 			if err == nil {
 				t.Fatal("NewTool succeeded for unsupported function shape")
 			}
-			if !strings.Contains(err.Error(), "func(context.Context, string|struct) (string, error)") {
+			if !strings.Contains(err.Error(), "func(context.Context, string|struct) (string|ToolResult|JSON-serializable, error)") {
 				t.Fatalf("error = %q, want supported signature", err)
 			}
 		})

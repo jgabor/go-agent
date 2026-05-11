@@ -36,6 +36,7 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Resolve Task 2 typed-usage blocker.
 - [x] Complete Chat Completions Streaming Fidelity freshness checkpoint.
 - [x] Complete Aila Runtime Gap Features plan (tasks 1–6): run overrides and limits, JSON replay and correlation, policy pending and recoverable denials, rich tool results, streaming tool progress, optional model capability hints.
+- [x] Complete Aila Runtime Gap Follow-ups plan (Task 6 freshness checkpoint; plan archived 2026-05-11).
 
 ## Now
 
@@ -44,6 +45,10 @@ also track repository bookkeeping that should not appear in the README roadmap.
 ## Examples
 
 ## Deferred
+
+- [ ] Additional in-tree provider adapters beyond OpenAI Chat Completions (GA-AILA-006).
+  - Trigger: a separate provider-specific plan or host need for Anthropic, Realtime, plan APIs, etc.
+  - Constraint: core stays library-first; adapters ship as focused packages or host code.
 
 - [ ] Consider an MCP adapter package outside the core.
   - Trigger: a concrete integration need exists.

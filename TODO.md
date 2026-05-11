@@ -4,6 +4,21 @@ Source of truth for product/runtime capability status: `README.md` Features &
 Roadmap table. This backlog breaks that roadmap into executable slices and may
 also track repository bookkeeping that should not appear in the README roadmap.
 
+## Now
+
+## Next
+
+## Later
+
+- [ ] Add recoverable-denial parity for `DecisionToolResult` policy decisions.
+  - Trigger: Aila needs post-execution tool-result policy recovery, such as secret redaction, unsafe output blocking, or replacing a real tool result with a synthetic denial/defer result returned to the model.
+  - Current behavior: `PolicyDecision.ToolResult` is honored only when `Allowed == false` for `DecisionToolCall`; the `DecisionToolResult` branch in `runner.callTool` still stops with `StopPolicyDenied` whenever `Allowed == false`.
+  - Desired behavior: when policy denies `DecisionToolResult` with non-nil `PolicyDecision.ToolResult`, validate the synthetic result, enforce cumulative output limits, append the synthetic tool-role message, emit the usual `EventPolicyDecision` and `EventToolResult`, increment tool-call/output accounting consistently, and continue the run. Denial without a synthetic result must keep terminating with `StopPolicyDenied`.
+  - Tests: add coverage proving `DecisionToolResult` recoverable denial reaches the next model turn, suppresses the original blocked result from session/events, preserves hard-denial behavior, and observes output/tool-call limits like `DecisionToolCall` synthetic denials.
+- [ ] Add a provider adapter package beyond OpenAI Chat Completions.
+  - Trigger: a concrete host need and provider-specific plan exists for Anthropic, OpenAI Realtime, plan/device-code APIs, or another non-Chat-Completions integration.
+  - Constraint: keep the core runtime provider-agnostic; adapter work belongs in a focused provider package or host-owned package, not in the root runtime contract.
+
 ## Done
 
 - [x] Publish product-facing README and roadmap.
@@ -35,31 +50,5 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Complete streaming-primary runtime contract freshness checkpoint.
 - [x] Resolve Task 2 typed-usage blocker.
 - [x] Complete Chat Completions Streaming Fidelity freshness checkpoint.
-- [x] Complete Aila Runtime Gap Features plan (tasks 1–6): run overrides and limits, JSON replay and correlation, policy pending and recoverable denials, rich tool results, streaming tool progress, optional model capability hints.
-- [x] Complete Aila Runtime Gap Follow-ups plan (Task 6 freshness checkpoint; plan archived 2026-05-11).
-
-## Now
-
-## Next
-
-## Examples
-
-## Deferred
-
-- [ ] Additional in-tree provider adapters beyond OpenAI Chat Completions (GA-AILA-006).
-  - Trigger: a separate provider-specific plan or host need for Anthropic, Realtime, plan APIs, etc.
-  - Constraint: core stays library-first; adapters ship as focused packages or host code.
-
-- [ ] Consider an MCP adapter package outside the core.
-  - Trigger: a concrete integration need exists.
-  - Constraint: core runtime must not require MCP.
-
-- [ ] Consider a sub-agent coordination package outside the core.
-  - Trigger: a concrete application needs reusable coordination primitives.
-  - Constraint: core runtime must not bake in a sub-agent hierarchy or workflow DSL.
-
-## Maintenance
-
-- [ ] Keep `README.md` roadmap status aligned with repository reality after each completed item.
-- [ ] Run `mage check` before proposing changes.
-- [ ] Avoid placeholder runtime code whose only purpose is making package-dependent gates do work.
+- [x] Complete Aila-facing runtime features: run overrides and limits, JSON replay and correlation, policy pending and tool-call recoverable denials, rich tool results, streaming tool progress, optional model capability hints.
+- [x] Complete Aila-facing runtime follow-ups: provider capability facts, policy cancellation classification, and documentation alignment.

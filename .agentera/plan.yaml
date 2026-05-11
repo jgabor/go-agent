@@ -1,144 +1,136 @@
 header:
   level: full
-  created: 2026-05-07
-  status: completed
-  reviewed: 2026-05-07
-  critic_issues: "12 found, 12 addressed, 0 dismissed"
-  revised: >-
-    Replanned after Decision 3: Task 2 now removes Usage.Meta, keeps usage
-    typed, and leaves cost/pricing calculation to hosts such as Lira.
-  title: "Plan: Chat Completions Streaming Fidelity"
+  created: 2026-05-11
+  status: proposed
+  reviewed: 2026-05-11
+  critic_issues: "7 found, 7 addressed, 0 dismissed"
+  title: "Plan: Aila Runtime Gap Features"
 what: >-
-  Add full-fidelity OpenAI-compatible Chat Completions streaming support to the
-  optional providers/openai package, plus the narrow generic request-option and
-  diagnostic surfaces needed to drive it through go-agent's existing
-  streaming-primary runtime.
+  Turn the Aila gap requests into a sequenced go-agent runtime plan: per-run
+  runtime controls, replay-safe events, observable and recoverable policy
+  behavior, richer tool execution surfaces, and later provider/model expansion.
+  The work stays at the library/runtime boundary so Aila can build its terminal
+  product without go-agent absorbing Aila's CLI, TUI, FSM, config, or artifact
+  ownership.
 why: >-
-  The Lira replacement gap analysis now shows the broad runtime seam is closed,
-  but provider fidelity remains shallow: ChatModel implements Model.Stream by
-  adapting a complete response rather than parsing provider SSE. A focused Chat
-  Completions adapter proves the canonical event grammar against real provider
-  streaming without starting a provider coverage campaign or importing Lira
-  product policy.
+  Aila is a strong downstream pressure test for go-agent. The gaps in
+  docs/aila-gap-feature-requests.md identify real runtime seams that hosts need
+  for stateful coding agents: phase-specific prompts and tools, approval flows
+  that can be shown and recovered from, visible long-running tools, replayable
+  event history, run lineage, bounded autonomy, and provider metadata. Planning
+  them together avoids public API churn while still keeping each implementation
+  cycle narrow enough to test and review.
 constraints: >-
-  Keep the core library-first and the provider work optional. Do not add provider
-  registry, credential discovery, auth cache behavior, Copilot exchange, Zen
-  routing, host CLI providers, workdir behavior, pricing, workflow recovery,
-  prompts/resources/settings, MCP, sub-agent orchestration, hosted platform,
-  model marketplace, background shell abstraction, or product CLI behavior.
-  README updates must stay roadmap/public-usage focused. Verification must end
-  with mage check or exact blocker documentation.
+  Preserve go-agent as a library-first runtime. Do not add a go-agent CLI, TUI,
+  workflow DSL, hosted platform, provider registry, credential discovery,
+  product config loading, permission popup UI, Aila artifact resolver, built-in
+  shell/edit/fetch tools, MCP requirement, sub-agent hierarchy, model
+  marketplace, pricing/cost ownership, or Aila capability adapters. Keep Usage
+  closed and typed. Keep README roadmap status aligned with repository reality.
+  Each implementation cycle must include focused tests, and the complete plan
+  must finish with mage check or exact blocker documentation.
 scope:
   included:
-    - OpenAI-compatible Chat Completions SSE request and response behavior.
-    - Canonical text delta, tool-call delta, usage, stop, and terminal error events from provider chunks.
-    - Narrow generic request options and bounded provider diagnostics required by the adapter.
-    - Tests for streaming fidelity, terminal ordering, cancellation, diagnostics, and no policy leakage.
-    - Provider docs, README roadmap status, Lira gap-analysis follow-up, TODO, and Agentera state freshness.
+    - Run-scoped runtime controls for instructions, registered-tool exposure, and aggregate run limits.
+    - JSON-safe event replay and optional host correlation fields for run/task lineage.
+    - Observable policy request lifecycle and recoverable tool-call denials.
+    - Streaming tool progress events and richer JSON-safe tool result facts.
+    - Optional model capability metadata and one provider-adapter expansion path after core contracts stabilize.
+    - Public docs, roadmap, examples if affected, TODO/progress freshness, and final local verification.
   excluded:
-    - OpenAI Responses API support.
-    - Anthropic provider support.
-    - Copilot token exchange, Zen routing, Ollama/custom provider registry, or provider selection policy.
-    - Lira-side adapters, Lira provider deletion, or Lira parity suite ownership.
-    - CLI subprocess providers, workdir behavior, cost/pricing, auth discovery, settings loading, prompt/resource loading, MCP, sub-agents, workflow DSL, hosted platform, or product shell behavior.
+    - Aila CLI, TUI, FSM, config files, artifact resolver, package lifecycle, permission UI, or capability adapters.
+    - Built-in go-agent implementations of read, edit, write, bash, grep, find, or fetch tools.
+    - Provider registry, credential discovery, token exchange, device-code login, pricing, account selection, or model marketplace behavior.
+    - MCP as a core dependency and sub-agent orchestration as a core runtime hierarchy.
+    - Workflow DSL, hosted control plane, or product shell behavior.
   deferred:
-    - OpenAI Responses streaming package work.
-    - Anthropic streaming package work.
-    - Lira adapters from driver.Driver and toolkit.Toolkit to go-agent Model and Tool.
-    - Broader provider HTTP option surfaces beyond this adapter's bounded needs.
+    - Multiple provider adapters in one batch.
+    - OpenAI Realtime unless the existing Model.Stream contract can be honored without product-specific semantics.
+    - MCP adapter and sub-agent coordination packages outside the core.
+    - Any Aila-side adapters from its controller/tooling to go-agent primitives.
 design: >-
-  Treat full fidelity as Chat Completions-only. First lock the supported provider
-  chunk and event mapping, then add only the request options and diagnostics that
-  can be tested without product-policy leakage. The provider must normalize SSE
-  chunks into canonical Event values rather than exposing chunk, choice, or
-  finish-reason-specific public fields. Usage is emitted only when the provider
-  supplies it; cost is never synthesized. Streaming should be explicit: do not
-  silently adapt a complete response when the streaming path was requested.
+  Sequence contract work from the most foundational and replay-sensitive seams to
+  the most optional extension work. First bound how a host configures one run.
+  Then make events replayable before introducing more event kinds. Next make
+  policy approval observable and recoverable. Then expand tool outputs and
+  progress in terms of canonical events. Only after those contracts stabilize
+  should provider/model expansion proceed, one adapter or metadata surface at a
+  time. Tool exposure must not become a per-run plugin registry: first-pass tool
+  visibility is limited to registered tools. Provider work must stay optional and
+  host-owned credential/config behavior must remain outside go-agent.
 tasks:
   - number: 1
-    name: Lock the Chat Completions fidelity contract
+    name: Bound run-scoped runtime controls
     depends_on: []
-    status: completed
+    status: pending
     acceptance:
-      - GIVEN the current OpenAI-compatible provider and Lira chat-completions pressure are reviewed WHEN the fidelity contract is written THEN it lists supported Chat Completions SSE chunk shapes, canonical event mapping, terminal semantics, usage behavior, diagnostics boundaries, and exact non-goals.
-      - GIVEN full fidelity is defined WHEN scope is inspected THEN it is limited to OpenAI-compatible Chat Completions streaming and does not include Responses, Anthropic, Copilot, Zen, provider registry, auth discovery, CLI subprocesses, workdir behavior, pricing, or Lira workflow policy.
-      - GIVEN the existing canonical Event grammar is inspected WHEN Task 1 completes THEN any missing fields are identified narrowly and ModelFromSimple/completion assembly remain preserved.
-    evidence:
-      - Added docs/chat-completions-streaming-fidelity-contract.md after reviewing providers/openai/openai.go, api.go, model_adapter.go, stream_assembly.go, docs/streaming-primary-event-grammar.md, docs/streaming-primary-openai-provider-proof.md, docs/lira-provider-replacement-gap-analysis.md, and Lira's chatcompletions.go pressure surface.
-      - The contract lists supported Chat Completions SSE record shapes, canonical event mapping, terminal setup-vs-accepted semantics, usage behavior, bounded diagnostics, and exact non-goals.
-      - Scope remains OpenAI-compatible Chat Completions streaming only and explicitly excludes Responses, Anthropic, Copilot, Zen, provider registry, auth discovery, CLI subprocesses, workdir behavior, pricing, and Lira workflow policy.
-      - Missing fields are identified narrowly as request options, general bounded diagnostics, and typed provider error metadata; no Task 1 changes are required to ModelFromSimple, StreamTurnResult, AssembleEvents, AssembleStream, or canonical message/block/tool-call/usage assembly fields.
+      - GIVEN a host runs the same Runner for different agent phases WHEN it supplies run-scoped instructions THEN only that run sees the override and later runs keep the Agent default.
+      - GIVEN a host limits model-visible tools for one run WHEN it selects from tools registered on the Agent THEN the model sees only the selected tools and unknown tool names are rejected before execution.
+      - GIVEN a host supplies an explicit empty tool selection WHEN the model turn starts THEN the model receives no tools for that run.
+      - GIVEN a host sets aggregate run limits WHEN a run exceeds model steps, tool calls, wall-clock duration, or cumulative tool output THEN the run stops with an observable limit reason.
+      - GIVEN Run and Stream receive equivalent run-scoped controls WHEN their events and results are compared THEN instructions, tool visibility, limits, and policy observations match.
   - number: 2
-    name: Add narrow request options, diagnostics, and typed usage
+    name: Make event replay and lineage safe
     depends_on: [1]
-    status: completed
+    status: pending
     acceptance:
-      - GIVEN callers configure a model turn WHEN provider-neutral options are used THEN max output tokens, temperature, and stop sequences can be represented without provider selection, auth, registry, settings, pricing, workdir, or Lira policy.
-      - GIVEN OpenAI-compatible Chat Completions needs non-universal knobs WHEN reasoning effort, response format, stream usage inclusion, or similar fields are exposed THEN they live in a bounded typed extension or provider-package option surface rather than an arbitrary core pass-through map.
-      - GIVEN provider diagnostics are surfaced WHEN requests fail or finish THEN allowed metadata is limited to provider/package identity, request ID, HTTP status, provider error type/code, raw stop reason, and bounded non-secret excerpts.
-      - GIVEN diagnostics are tested WHEN sensitive or product-owned data is considered THEN API keys, auth headers, full prompts/messages, unredacted tool arguments, environment values, credential-bearing URLs, pricing, registry, and workflow policy cannot be represented.
-      - GIVEN usage metadata is exposed WHEN public Usage, events, docs, and tests are inspected THEN Usage has no arbitrary Meta map and no cost/pricing fields; it remains typed around token/cache/request/provider/model facts.
-    prior_attempts:
-      - Task 2 initially added narrow TurnOptions, ProviderDiagnostics, ProviderError, typed providers/openai ChatOptions, OpenAI request option mapping, and provider error diagnostics, but failed evaluation because stale docs and proof fixtures still allowed opaque metadata.
-      - Two retries removed opaque diagnostics from ProviderDiagnostics docs/proofs and added provider-error excerpt redaction, but final evaluation still failed because public Usage.Meta remained an arbitrary map.
-      - Decision 3 resolved the blocker: remove Usage.Meta, keep typed token/cache usage only, and leave cost/pricing calculation to hosts such as Lira.
-    evidence:
-      - api.go removed Usage.Meta; Usage is now closed to typed token/cache/request/provider/model facts with no map, interface, cost, pricing, currency, budget, marketplace, registry, or policy fields.
-      - EventUsage, TurnResult.Usage, RunResult.Usage, StreamTurnResult, and stream assembly fixtures now carry the closed Usage shape; api_test.go proves the public Usage surface has no arbitrary extension map or pricing/cost fields.
-      - Existing Task 2 work remains bounded: TurnOptions contains only MaxOutputTokens, Temperature, and StopSequences; providers/openai.ChatOptions contains typed reasoning effort, response format, and stream usage inclusion; ProviderDiagnostics and ProviderError remain limited to provider/package identity, request ID, HTTP status, provider error type/code, raw stop reason, and sanitized bounded excerpts.
-      - docs/chat-completions-streaming-fidelity-contract.md, docs/streaming-primary-event-grammar.md, docs/streaming-primary-contract-boundary.md, and docs/lira-provider-replacement-gap-analysis.md now describe typed usage facts and do not advertise Usage.Meta or cost/pricing in core.
-      - Focused tests, go test ./..., mage check, and Agentera plan/progress/todo checks passed for this Task 2 completion cycle.
+      - GIVEN any event emitted by the current runtime WHEN it is converted to the JSON-safe event representation and back THEN the displayable error, stop reason, usage, message, tool, decision, retry, and diagnostics facts survive roundtrip.
+      - GIVEN serialized event history is replayed WHEN run assembly consumes the restored events THEN the assembled result matches the original observable transcript and stop outcome.
+      - GIVEN a host supplies optional run, parent-run, task, or metadata correlation WHEN events are emitted THEN sinks and Stream consumers can correlate events without inferring lineage from text.
+      - GIVEN correlation fields are omitted WHEN existing callers run unchanged THEN zero values produce no behavior change.
+      - GIVEN future event kinds are added WHEN tests are written THEN each new payload must prove JSON roundtrip before the task is complete.
   - number: 3
-    name: Implement Chat Completions SSE streaming
+    name: Expose recoverable policy flow
     depends_on: [1, 2]
-    status: completed
+    status: pending
     acceptance:
-      - GIVEN an OpenAI-compatible endpoint emits SSE text chunks WHEN ChatModel.Stream runs THEN canonical response, content-block, text-delta, message-final, usage-if-present, and stop events drive the assembled Run result.
-      - GIVEN tool-call chunks stream by provider index WHEN names, IDs, and argument fragments arrive across multiple chunks THEN canonical tool-call deltas preserve stable call identity and final assembly before tool execution.
-      - GIVEN provider usage is absent or present WHEN streaming completes THEN absence is valid and supplied usage is emitted without synthesizing token counts or cost.
-      - GIVEN streaming is requested WHEN the provider does not supply SSE THEN the adapter does not silently hide the condition by pretending a complete response was streamed.
-    evidence:
-      - providers/openai.ChatModel.Stream now sends Chat Completions requests with stream=true, Accept=text/event-stream, existing bounded request options, and optional typed stream_options.include_usage; it no longer adapts complete JSON responses on the streaming path.
-      - providers/openai now parses OpenAI-compatible SSE data records into canonical response_start, content_block_start, text_delta, tool_call_delta, content_block_end, message_final, tool_call_ready, usage-if-present, success stop events for completed assistant turns, and terminal error/stop events for accepted stream failures.
-      - Tool-call streaming is accumulated by provider index with stable BlockID and ToolCallID, function name and raw argument fragments are emitted as ToolCallDelta values, final JSON arguments are validated at block finalization, and tool_call_ready is emitted only after message_final.
-      - Usage is emitted only when supplied by the provider, mapped to the closed Usage fields without synthesized token counts or cost/pricing fields; absence remains valid.
-      - Non-2xx setup failures keep typed ProviderError diagnostics, and 2xx non-SSE responses are rejected before response_start so complete-response JSON is not silently treated as streamed output.
-      - Focused provider tests cover SSE text assembly from provider-emitted stop events, indexed tool-call deltas and final assembly without premature run stops, usage present/absent before stop, raw finish reason diagnostics, provider errors, redaction, typed option surfaces, and no silent non-SSE fallback. Verification passed with focused provider tests, go test ./providers/openai, go test ./..., mage check, and Agentera plan/progress checks.
+      - GIVEN an explicit policy is about to decide on a run, retry, tool call, or tool result WHEN the runtime asks for the decision THEN a pending policy event is observable before the decision event.
+      - GIVEN policy denies a tool call with a recoverable tool result WHEN the run continues THEN the model receives that denial as the tool response on the next turn.
+      - GIVEN policy denies without a recoverable result WHEN the decision is applied THEN the existing policy-denied stop behavior is preserved.
+      - GIVEN repeated recoverable denials occur WHEN run limits are active THEN synthetic denial results count toward the same bounded run behavior as ordinary tool outcomes.
+      - GIVEN non-interactive hosts ignore pending policy events WHEN their runs execute THEN existing allow-all and synchronous policy behavior remains compatible.
   - number: 4
-    name: Prove streaming fidelity and failure behavior
-    depends_on: [3]
-    status: completed
+    name: Add rich tool result authoring
+    depends_on: [2, 3]
+    status: pending
     acceptance:
-      - GIVEN provider SSE tests run WHEN text deltas, interleaved indexed tool-call argument deltas, final usage, finish reasons, and raw stop reasons are simulated THEN no provider-specific event fields are required.
-      - GIVEN setup failures, provider errors before first accepted event, accepted-stream failures, malformed chunks, incomplete tool calls, invalid JSON arguments, and cancellation occur WHEN ChatModel.Stream is observed THEN Go errors and terminal events follow the existing streaming-primary contract.
-      - GIVEN event emission is interrupted or the context is cancelled WHEN streaming is in progress THEN the adapter terminates without leaking work or producing contradictory terminal events.
-      - GIVEN diagnostics are inspected WHEN error and finish paths run THEN bounded metadata is present while credentials, auth material, prompts, tool payloads, pricing, registry/config policy, workdir, and Lira workflow facts are absent.
-    evidence:
-      - Added provider-side Task 4 proofs in providers/openai/openai_test.go for text plus interleaved indexed tool-call argument deltas, final usage chunks, finish reasons, and raw stop diagnostics using only canonical goagent.Event fields.
-      - Added failure-matrix coverage for setup failures, provider errors before accepted SSE events, accepted-stream failures, malformed chunks, incomplete tool calls, invalid JSON tool arguments, and context cancellation; accepted failures assemble to terminal error plus stop events under the streaming-primary contract while pre-acceptance failures produce Go errors without accepted transcript events.
-      - Minimal implementation fix: providers/openai.ChatModel.Stream now passes context into the SSE adapter and maps accepted context cancellation/deadline failures to StopCanceled rather than StopModelError, while preserving provider model-error stops for malformed or failed provider streams.
-      - Cancellation proof cancels during an accepted stream, verifies the server observes request cancellation, and asserts no contradictory complete stop is emitted.
-      - Diagnostics proofs inspect finish and error paths for bounded provider/package/request/status/error/raw-stop/excerpt metadata and assert credentials, auth material, prompts, tool payloads, pricing/cost, registry/config policy, workdir, Lira, and workflow facts are absent.
-      - Verification passed with focused Task 4 provider tests, go test ./providers/openai, go test ./..., mage check, and Agentera plan/progress checks.
+      - GIVEN a tool returns text, structured JSON, and generic result facts WHEN the runtime emits the tool result THEN events preserve the JSON-safe content and facts without requiring product-specific interpretation.
+      - GIVEN a helper-authored tool returns a richer result shape WHEN it executes THEN the helper path can populate content, structured JSON, and metadata while existing string-returning helpers still work unchanged.
+      - GIVEN a result includes truncation, compression, or source-reference facts WHEN sinks observe it THEN those facts are explicit and replay-safe.
+      - GIVEN metadata contains unsupported non-JSON values WHEN the result is prepared for events or replay THEN the runtime rejects or normalizes it rather than writing unreplayable state.
+      - GIVEN shell-specific details are needed by a host WHEN it authors a tool THEN go-agent permits opaque host facts without adding shell ownership to core.
   - number: 5
-    name: Refresh docs and checkpoint reality
-    depends_on: [1, 2, 3, 4]
-    status: completed
+    name: Stream long-running tool progress
+    depends_on: [2, 4]
+    status: pending
     acceptance:
-      - GIVEN Chat Completions SSE fidelity is complete WHEN repository docs are reviewed THEN provider docs, README roadmap, examples if affected, AGENTS.md guidance if needed, and the Lira gap-analysis follow-up no longer contradict repository reality.
-      - GIVEN README changes are made WHEN public semantics change THEN they stay focused on product shape, public usage, and roadmap status rather than setup history or implementation diary detail.
-      - GIVEN Agentera state is updated WHEN the plan completes THEN `.agentera/plan.yaml`, `.agentera/progress.yaml` if used, and relevant TODO entries reflect completed work and recorded surprises.
-      - GIVEN local verification runs WHEN the plan completes THEN `mage check` succeeds or exact failing gates and blockers are recorded.
-    evidence:
-      - Reviewed repository docs and current provider state for Task 5 after Tasks 1-4 passed. Updated provider-facing documentation in docs/chat-completions-streaming-fidelity-contract.md, docs/streaming-primary-openai-provider-proof.md, and AGENTS.md so they describe the implemented providers/openai.ChatModel.Stream SSE adapter, typed options, bounded diagnostics, provider-side success stop semantics, and no premature stop for tool-call turns.
-      - Updated docs/lira-provider-replacement-gap-analysis.md so the follow-up no longer claims Chat Completions streaming, indexed tool-call accumulation, final usage capture, or reasoning effort are missing from go-agent's OpenAI-compatible Chat Completions adapter. The replacement conclusion remains unchanged: Lira still owns registry/config/auth/cache, CLI subprocess providers, workdir behavior, pricing/cost policy, workflow policy, Copilot, Zen, and product UX.
-      - Kept README changes focused on product shape and roadmap status by changing only the Providers roadmap evidence to say providers/openai streams Chat Completions SSE; no setup history or implementation diary detail was added.
-      - Examples were reviewed by the full gate and did not need doc changes for this provider freshness slice.
-      - Updated TODO.md with the completed Chat Completions Streaming Fidelity freshness checkpoint and recorded this Task 5 completion in progress.yaml. No surprises required product-boundary changes.
-      - Verification passed with Agentera plan/progress/todo checks and `mage check`.
+      - GIVEN a tool can report incremental progress WHEN it runs through the runtime THEN progress events are ordered, correlated with the tool call, and followed by exactly one final tool result or terminal error.
+      - GIVEN a non-streaming tool runs WHEN it does not opt into progress THEN existing single-result behavior is unchanged.
+      - GIVEN context cancellation occurs while a tool is reporting progress WHEN the tool observes cancellation THEN the run stops visibly without hiding background work.
+      - GIVEN progress output is large or frequent WHEN sinks consume it THEN ordering and boundedness rules prevent ambiguous or unbounded event streams.
+      - GIVEN progress events are replayed from JSON WHEN history is inspected THEN progress remains observational and does not alter transcript assembly unless included in the final tool result.
+  - number: 6
+    name: Expand model and provider surfaces incrementally
+    depends_on: [2]
+    status: pending
+    acceptance:
+      - GIVEN a model exposes optional capability metadata WHEN a host asks for it THEN the host can learn provider/model identity, context limits, tool support, streaming support, and reasoning support without requiring every Model to implement introspection.
+      - GIVEN a model does not expose capability metadata WHEN a host checks for it THEN the base Model contract still works unchanged.
+      - GIVEN a new provider adapter is added WHEN its stream is consumed THEN it emits the same canonical event grammar, cancellation behavior, diagnostics boundaries, replay safety, and Run/Stream parity as existing providers.
+      - GIVEN provider credentials, registry selection, device-code login, account choice, or pricing would be needed WHEN provider work is scoped THEN those concerns stay host-owned and absent from go-agent.
+      - GIVEN OpenAI Realtime or another non-SSE protocol is considered WHEN it cannot faithfully implement the current Model.Stream contract THEN it is deferred or split into a separate design decision before coding.
+  - number: 7
+    name: Sync docs, roadmap, state, and verification
+    depends_on: [1, 2, 3, 4, 5, 6]
+    status: pending
+    acceptance:
+      - GIVEN the runtime contracts change WHEN public docs are reviewed THEN README product text, roadmap status, examples if affected, and AGENTS.md guidance reflect repository reality without becoming implementation diaries.
+      - GIVEN the Aila gap document is used as the source backlog WHEN the plan completes THEN completed, deferred, and non-request items are clear enough for Aila-side planning.
+      - GIVEN TODO and Agentera state are reviewed WHEN final sync runs THEN stale completed work is archived or removed and remaining deferred items still match project direction.
+      - GIVEN local verification runs WHEN the plan is ready to hand off THEN mage check succeeds or exact failing gates and blockers are recorded.
 overall_acceptance:
-  - GIVEN a host uses providers/openai.ChatModel with an OpenAI-compatible Chat Completions streaming endpoint WHEN the provider emits text, tool calls, usage, finish, or error SSE chunks THEN go-agent emits canonical events and assembles completion results from them.
-  - GIVEN Lira later maps its chat-completions driver to go-agent WHEN comparing behavior THEN the remaining gaps are Lira adapter/config/auth/policy work rather than missing generic Chat Completions streaming fidelity.
-  - GIVEN product-boundary review is performed WHEN the plan completes THEN go-agent still does not own provider registry, auth discovery, CLI subprocesses, workflow policy, workdir behavior, pricing, MCP, sub-agent orchestration, workflow DSL, hosted platform, or product shell behavior.
+  - GIVEN Aila embeds go-agent as its runtime foundation WHEN it needs per-phase prompts/tools, visible approval, long-running tool progress, replayable events, run lineage, and bounded autonomy THEN those needs are served by generic go-agent primitives rather than Aila-specific product code in core.
+  - GIVEN existing go-agent callers upgrade WHEN they do not use the new optional seams THEN current Agent, Runner, Model, Tool, Session, Event, Policy, Run, and Stream behavior remains compatible.
+  - GIVEN a maintainer reviews the completed work WHEN checking project boundaries THEN go-agent still does not own CLI/TUI behavior, workflow DSLs, hosted platform behavior, provider registry/auth/config, MCP requirements, sub-agent orchestration, pricing, or built-in coding-agent tools.
 surprises:
-  - The only material stale reality was documentation: the Lira gap analysis and provider proof documents still described the OpenAI-compatible Chat Completions adapter as shallow or missing SSE fidelity even though Tasks 3-4 had implemented and proved it.
+  - The full-plan critic flagged provider expansion as premature unless core event and tool contracts stabilize first; the plan now moves replay/correlation ahead of new event kinds and treats provider work as incremental, optional, and split-ready.

@@ -165,4 +165,54 @@ decisions:
       truth itself.
     confidence: firm
     feeds_into: [TODO.md]
+  - number: 4
+    date: 2026-05-11
+    question: Should go-agent keep an optional developer CLI on its roadmap?
+    context: >-
+      The backlog and README still kept an optional go-agent developer CLI open
+      as deferred work. That no longer matches project direction: Aila is being
+      developed in a separate repository as the terminal coding-agent product,
+      and go-agent is intended to dogfood through Aila rather than duplicate that
+      CLI surface. The Aila gap request document should inform reusable runtime
+      seams, but not move go-agent toward product-shell ownership.
+    alternatives:
+      - name: '[Keep optional go-agent CLI deferred]'
+        status: rejected
+        tradeoffs: >-
+          Preserves a possible in-repo developer shell, but keeps inviting future
+          agents to revive product work that Aila now owns.
+        win_condition: >-
+          Choose this only if Aila stops being the intended dogfood CLI or if a
+          go-agent-specific shell proves necessary beyond examples.
+      - name: '[Move runtime gaps directly into Now or Next]'
+        status: rejected
+        tradeoffs: >-
+          Would convert Aila's architecture requests into immediate runtime work,
+          but risks treating design evidence as implementation proof before
+          dogfooding clarifies which gaps matter first.
+        win_condition: >-
+          Choose this after Aila dogfooding shows a concrete runtime gap blocking
+          useful product progress.
+      - name: '[Close go-agent CLI and dogfood through Aila]'
+        status: chosen
+        tradeoffs: >-
+          Makes the product boundary explicit and keeps go-agent focused on
+          library primitives. It does mean runtime priorities should be promoted
+          later from observed Aila pressure, not from the CLI closure itself.
+        win_condition: >-
+          Future agents treat Aila as the developer CLI product and update
+          go-agent only for reusable runtime seams proven by that dogfood loop.
+    choice: >-
+      Do not build an optional developer CLI in go-agent. Aila owns the terminal
+      coding-agent CLI and should be the dogfood product for go-agent runtime
+      seams; go-agent should remain a library-first runtime beneath host
+      applications.
+    reasoning: >-
+      The deciding variable was ownership boundary. A CLI would make go-agent a
+      product shell competing with Aila's intended surface, while Aila can supply
+      the real usage pressure needed to prioritize runtime-library gaps. Closing
+      the CLI path now prevents stale deferred work from reappearing without
+      prematurely promoting Aila's gap list into the active go-agent backlog.
+    confidence: firm
+    feeds_into: [README.md, TODO.md]
 archive: []

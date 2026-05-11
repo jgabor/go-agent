@@ -438,7 +438,7 @@ This table reflects the repository today.
 | Policy hooks            | Approval, limits, validation, and authorization hooks    | Started        | Run/tool/result decisions in events             |
 | Tests                   | Unit and integration coverage for runtime behavior       | Started        | API and behavior contract tests exist           |
 | Examples                | Minimal app, service, worker, and CLI examples           | Started        | Examples use `New` with local models            |
-| CLI                     | Optional developer CLI around the library                | Deferred       | Library-first direction                         |
+| CLI                     | Optional developer CLI around the library                | Won't fix      | Aila owns the dogfood CLI surface               |
 | MCP adapter             | Optional adapter package outside the core                | Won't fix      | Deliberate non-goal for core                    |
 | Sub-agent orchestration | Optional coordination package outside the core           | Won't fix      | Deliberate non-goal for core                    |
 

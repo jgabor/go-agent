@@ -44,10 +44,6 @@ also track repository bookkeeping that should not appear in the README roadmap.
 
 ## Deferred
 
-- [ ] Consider an optional developer CLI after the library runtime is useful.
-  - Trigger: core API, runtime loop, events, sessions, policy hooks, tests, and examples are in place.
-  - Constraint: CLI must wrap the library; it must not become the product center.
-
 - [ ] Consider an MCP adapter package outside the core.
   - Trigger: a concrete integration need exists.
   - Constraint: core runtime must not require MCP.

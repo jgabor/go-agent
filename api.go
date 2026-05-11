@@ -24,6 +24,24 @@ type Runner interface {
 	Stream(context.Context, RunRequest) (<-chan Event, error)
 }
 
+// RunLimits bounds resource consumption for a single run. Zero values mean no
+// explicit limit for that field.
+type RunLimits struct {
+	// MaxSteps limits model turns for this run. When zero, RunRequest.MaxSteps
+	// applies, then the runner default.
+	MaxSteps int
+	// MaxToolCalls limits how many tool executions complete in this run. When
+	// zero, there is no tool-call count limit.
+	MaxToolCalls int
+	// MaxDuration bounds wall-clock time for the run via context deadline. When
+	// zero, no duration limit is applied by the runtime.
+	MaxDuration time.Duration
+	// MaxToolOutputBytes bounds cumulative encoded tool result payload for this
+	// run (approximated as json.Marshal of each ToolResult after validation).
+	// When zero, there is no aggregate output limit.
+	MaxToolOutputBytes int64
+}
+
 // RunRequest is the host application's request to execute one agent run.
 type RunRequest struct {
 	Input string
@@ -32,8 +50,27 @@ type RunRequest struct {
 	Session   Session
 	// Options carries provider-neutral model-turn controls for every model call in the run.
 	Options TurnOptions
-	// MaxSteps limits model turns in one run. Zero means the runtime default applies.
+	// MaxSteps limits model turns in one run. Zero means the runtime default applies
+	// unless Limits.MaxSteps is set.
 	MaxSteps int
+	// Instructions overrides Agent.Instructions for this run when non-empty.
+	Instructions string
+	// ToolNames selects which Agent-registered tools are visible for this run.
+	// nil uses all Agent tools; an empty non-nil slice exposes no tools; each
+	// listed name must exist on the Agent or Run/Stream returns an error before
+	// the run starts.
+	ToolNames []string
+	// Limits applies optional run-level bounds. Zero-valued fields are ignored.
+	Limits RunLimits
+	// RunID overrides the auto-generated run identifier on emitted events when
+	// non-empty after trimming whitespace.
+	RunID string
+	// ParentRunID is copied onto every emitted event for host-side lineage.
+	ParentRunID string
+	// TaskID is copied onto every emitted event for host-side task correlation.
+	TaskID string
+	// Metadata is shallow-copied onto every emitted event as opaque host labels.
+	Metadata map[string]string
 }
 
 // RunResult is the final observable outcome of an agent run.
@@ -168,6 +205,12 @@ type ToolSafety struct {
 type ToolConstraints struct {
 	Timeout        time.Duration
 	MaxOutputBytes int
+	// MaxProgressEvents caps EventToolProgress emissions per streaming invocation.
+	// Zero means the runner default (1024).
+	MaxProgressEvents int
+	// MaxProgressBytes caps cumulative progress payload (text plus JSON encoding)
+	// per streaming invocation. Zero means the runner default (512 KiB).
+	MaxProgressBytes int64
 }
 
 // ToolMetadata is runtime metadata exposed by advanced tool implementations.
@@ -200,7 +243,26 @@ type ToolResult struct {
 	CallID  string
 	Name    string
 	Content string
-	JSON    any
+	// JSON is structured model-facing data (object, array, or leaf) when the
+	// tool returns more than plain text. It must be JSON-serializable; use
+	// ValidateToolResult before returning from custom tools if unsure.
+	JSON any
+	// Metadata carries host-owned string key/value facts for sinks, policy, and
+	// replay. Values are opaque to the core runtime beyond JSON safety.
+	Metadata map[string]string
+	// Truncated reports whether Content or JSON was truncated from a larger payload.
+	Truncated bool
+	// OriginalBytes is the pre-truncation byte length when Truncated is true.
+	OriginalBytes int64
+	// Compressed reports whether the payload was stored or transferred in compressed form.
+	Compressed bool
+	// CompressionKind names the compression when Compressed is true (e.g. "gzip").
+	CompressionKind string
+	// SourceRef is an optional citation, blob id, or URI string for the result source.
+	SourceRef string
+	// Opaque carries JSON-serializable host-only facts (for example subprocess
+	// exit metadata) without the core interpreting them. Must pass ValidateToolResult.
+	Opaque map[string]any
 }
 
 // ToolCallDelta carries one incremental tool-call fragment.
@@ -285,6 +347,7 @@ type Event struct {
 	ToolCall       ToolCall
 	ToolCallDelta  ToolCallDelta
 	ToolResult     ToolResult
+	ToolProgress   ToolProgress
 	Usage          Usage
 	Diagnostics    ProviderDiagnostics
 	Decision       Decision
@@ -292,6 +355,13 @@ type Event struct {
 	Retry          RetryEvent
 	StopReason     StopReason
 	Err            error
+	// ParentRunID links this event stream to a parent run when the host set it
+	// on RunRequest.
+	ParentRunID string
+	// TaskID carries the host task identifier from RunRequest when set.
+	TaskID string
+	// Metadata carries opaque correlation labels from RunRequest when set.
+	Metadata map[string]string
 }
 
 // EventSink observes runtime events without controlling run behavior.
@@ -329,8 +399,16 @@ const (
 	EventToolCall EventKind = "tool_call"
 	// EventToolResult reports the result returned by a tool.
 	EventToolResult EventKind = "tool_result"
+	// EventToolProgress reports incremental observational output from a streaming tool.
+	EventToolProgress EventKind = "tool_progress"
 	// EventUsage reports typed usage facts for a provider/runtime interaction.
 	EventUsage EventKind = "usage"
+	// EventPolicyPending reports that policy is about to be consulted for a
+	// decision. It is emitted only when an explicit host Policy is configured,
+	// immediately before Policy.Decide for run start, tool call, tool result, and
+	// retry decisions. It is observational; the runtime still calls Decide
+	// synchronously.
+	EventPolicyPending EventKind = "policy_pending"
 	// EventPolicyDecision reports the policy outcome for a runtime decision.
 	EventPolicyDecision EventKind = "policy_decision"
 	// EventRetry reports retry consideration, attempts, skips, and terminal retry outcomes.
@@ -355,6 +433,12 @@ const (
 	StopPolicyDenied StopReason = "policy_denied"
 	// StopStepLimit means the run reached its configured step limit.
 	StopStepLimit StopReason = "step_limit"
+	// StopToolCallLimit means the run reached its configured tool-call limit.
+	StopToolCallLimit StopReason = "tool_call_limit"
+	// StopOutputLimit means cumulative tool output exceeded the configured limit.
+	StopOutputLimit StopReason = "output_limit"
+	// StopDurationLimit means the run's MaxDuration deadline was reached.
+	StopDurationLimit StopReason = "duration_limit"
 	// StopCanceled means the context canceled before completion.
 	StopCanceled StopReason = "canceled"
 	// StopRetryExhausted means a retryable failure remained after the retry budget was exhausted.
@@ -410,7 +494,14 @@ type PolicyDecision struct {
 	Reason   string
 	MaxSteps int
 	ToolCall *ToolCall
-	Retry    RetryPolicy
+	// ToolResult, when Allowed is false for a DecisionToolCall decision only,
+	// supplies a synthetic tool outcome: the runtime skips tool execution,
+	// appends a tool-role message with this result, emits EventToolResult, and
+	// continues the run. When Allowed is false and ToolResult is nil, the run
+	// stops with StopPolicyDenied (unchanged). When Allowed is true, ToolResult
+	// is ignored.
+	ToolResult *ToolResult
+	Retry      RetryPolicy
 }
 
 // RetryContext is the typed policy-visible context for one considered retry.

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Runtime seams for downstream hosts: per-run instructions and registered-tool subset (`ToolNames`), aggregate `RunLimits`, versioned JSON event persistence with optional run correlation fields, policy pending events and recoverable tool-call denials, rich `ToolResult` facts with validation, optional `StreamingTool` progress events, and optional `ModelCapabilitiesOf` hints (`openai.ChatModel`).
 - Added `NewRunner` implementing the core agent loop with model turns, tool dispatch, policy checks, event emission, session tracking, step limits, and cancellation.
 - Added expanded policy decisions for run-start constraints, tool-call constraints, and tool-result validation with structured policy events.
 - Added `providers/openai` with an OpenAI-compatible chat completions model adapter.

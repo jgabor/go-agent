@@ -156,7 +156,7 @@ func (r *eventReducer) apply(index int, event Event) error {
 		r.resultValue.Err = event.Err
 	case EventStop:
 		return r.stop(index, event)
-	case EventPolicyDecision, EventRetry:
+	case EventToolProgress, EventPolicyPending, EventPolicyDecision, EventRetry:
 		// Runtime decision events are observational for transcript assembly.
 	default:
 		return divergence(index, fmt.Sprintf("unknown event kind %q", event.Kind))

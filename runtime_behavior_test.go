@@ -97,6 +97,7 @@ func TestRuntimeBehaviorSpecification(t *testing.T) {
 			},
 			wantStop: goagent.StopPolicyDenied,
 			wantEvents: []goagent.EventKind{
+				goagent.EventPolicyPending,
 				goagent.EventPolicyDecision,
 				goagent.EventPolicyDecision,
 				goagent.EventStop,
@@ -273,7 +274,7 @@ func assertOrderedCorrelatedEvents(t *testing.T, events []goagent.Event) {
 				t.Fatalf("tool call event %d is not correlated: %+v", i, event)
 			}
 			toolCalls[event.ToolCallID] = true
-		case goagent.EventPolicyDecision:
+		case goagent.EventPolicyPending, goagent.EventPolicyDecision:
 			if event.ToolCallID != "" && !toolCalls[event.ToolCallID] {
 				t.Fatalf("event %d references unknown tool call %q", i, event.ToolCallID)
 			}

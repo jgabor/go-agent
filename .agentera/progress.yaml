@@ -1,4 +1,138 @@
 cycles:
+  - number: 55
+    timestamp: "2026-05-11"
+    type: docs
+    phase: build
+    what: Completed PLAN Task 7 (Sync docs, roadmap, state, and verification) closing the Aila Runtime Gap Features plan.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 7 makes README, AGENTS, gap analysis, TODO, and changelog match shipped runtime contracts without turning README into a setup diary.
+    discovered: The gap summary table in docs/aila-gap-feature-requests.md is best complemented by a single resolution matrix so Aila-side planning can treat detailed historical sections as background.
+    verified: >-
+      Plan header status completed; task 7 evidence recorded; README roadmap Run limits row;
+      AGENTS.md Current Reality expanded; aila gap doc status matrix; TODO Done entry;
+      CHANGELOG Unreleased summary; mage check passed.
+    next: No open tasks in this plan; choose a new plan or backlog slice for further work.
+    context:
+      intent: Execute Task 7 final sync for the Aila Runtime Gap Features plan.
+      constraints: Surgical doc edits only; vision.yaml unchanged.
+      scope: README, AGENTS.md, docs/aila-gap-feature-requests.md, TODO.md, CHANGELOG.md, .agentera/plan.yaml, this file.
+  - number: 54
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 6 (Expand model and provider surfaces incrementally) with optional ModelCapabilities introspection and ChatModel implementation.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 6 gives hosts a typed seam for provider/model hints without registry, auth, or pricing in core, and documents adapter contract boundaries including Realtime-style deferral.
+    discovered: ModelCapabilitiesOf(nil) should return false to match defensive host checks.
+    verified: >-
+      Implemented ModelCapabilities, ModelCapabilitiesProvider, ModelCapabilitiesOf;
+      openai.ChatModel.ModelCapabilities and package doc contract notes; tests for
+      absent/nil capabilities and ChatModel provider; README Providers section and
+      roadmap. Local verification passed with go test ./..., mage check, and gofumpt.
+    next: PLAN Task 7 Sync docs, roadmap, state, and verification remains pending.
+    context:
+      intent: Execute Task 6 from the Aila Runtime Gap Features plan via realisera.
+      constraints: No provider registry, credential discovery, or pricing in core.
+      scope: model_capabilities.go, providers/openai/openai.go, tests, README, plan/progress.
+  - number: 53
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 5 (Stream long-running tool progress) with optional StreamingTool, EventToolProgress, and bounded Emit.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 5 matches GA-AILA-004 style visible long-running tool work without the core owning shell execution.
+    discovered: Tool cancellation with MaxAttempts 1 previously surfaced as StopToolError; callTool now maps context.Canceled and deadline-exceeded (when the run uses MaxDuration) to the same stop reasons as the outer run loop.
+    verified: >-
+      Implemented StreamingTool, ToolProgressEmitter.Emit errors, EventToolProgress,
+      ToolConstraints progress caps, invoke routing, cloneToolProgress and event JSON
+      fields, observational assembly, streaming_tool_test and stream_assembly_test
+      coverage, README updates, plan task 5 evidence. Local verification passed with
+      go test ./..., mage check, and gofumpt.
+    next: PLAN Task 6 Expand model and provider surfaces incrementally remains pending.
+    context:
+      intent: Execute Task 5 from the Aila Runtime Gap Features plan via realisera.
+      constraints: No shell runner in core; library-first API.
+      scope: api.go, runner.go, tool_execution.go, streaming_tool.go, stream_assembly.go, event_json.go, tests, README, plan/progress.
+  - number: 52
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 4 (Add rich tool result authoring) by extending ToolResult, validating replay-safe JSON, and sizing aggregate limits on full encoded payloads.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 4 closes GA-AILA-style seams for structured tool outcomes, host metadata, truncation or compression hints, and opaque subprocess facts without the core owning shell semantics.
+    discovered: Aggregate MaxToolOutputBytes is best aligned with json.Marshal of the whole ToolResult after validation so new fields participate consistently in the same limit as JSON and text.
+    verified: >-
+      Implemented ToolResult.Metadata, Truncated, OriginalBytes, Compressed,
+      CompressionKind, SourceRef, Opaque; ValidateToolResult; runner validation
+      on success and policy synthetic paths; cloneToolResult and payload byte
+      accounting; tool_result_test.go; README tool design and roadmap updates;
+      plan task 4 evidence. Local verification passed with go test ./..., mage check,
+      and gofumpt.
+    next: PLAN Task 5 Stream long-running tool progress remains pending.
+    context:
+      intent: Execute Task 4 from the Aila Runtime Gap Features plan via realisera.
+      constraints: Library-first; no shell builtins in core; vision.yaml unchanged.
+      scope: api.go, runner.go, tool_result.go, tool_result_test.go, README, plan/progress.
+  - number: 51
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 3 (Expose recoverable policy flow) with policy-pending events and synthetic tool-call denials via PolicyDecision.ToolResult.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 3 addresses GA-AILA-003/004 style policy observability and recoverable denials so hosts can render approval UI from pending payloads and return structured refusals to the model without terminating the run.
+    discovered: nil default policy must stay quiet on pending while tool-call policy decisions still emit for the allow-all built-in path used in tests without an explicit Policy.
+    verified: >-
+      Implemented EventPolicyPending, PolicyDecision.ToolResult synthetic tool path,
+      cloneEvents policy deep-copy, stream assembly observational branch, README policy
+      and roadmap updates, plan task 3 evidence, runner_test recoverable/hard-deny/limit
+      tests, and event_history/runtime_behavior kind ordering. Local verification passed
+      with go test ./..., mage check, and gofumpt.
+    next: PLAN Task 4 Add rich tool result authoring remains pending.
+    context:
+      intent: Execute Task 3 from the Aila Runtime Gap Features plan via realisera.
+      constraints: Library-first; no vision.yaml edits; synchronous Decide unchanged in control flow.
+      scope: api.go, runner.go, stream_assembly.go, event_json.go, README, tests, plan/progress.
+  - number: 50
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 2 (Make event replay and lineage safe) by adding JSON-safe event persistence, optional correlation fields on runs and events, and tests for roundtrip and assembly parity.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 2 closes GA-AILA-008/009 style replay and lineage seams so hosts can persist transcripts and correlate streams without inferring identity from text.
+    discovered: Standard `encoding/json` represents absent `json.RawMessage` as JSON null, which unmarshals as the literal bytes "null" rather than nil; normalization keeps persistence roundtrips aligned with in-memory zero values.
+    verified: >-
+      Implemented persistedEventsEnvelope v1, JSONEvent mapping, MarshalEvents/UnmarshalEvents,
+      RunRequest/Event correlation fields, runner send stamping and clone safety for RunRequest
+      metadata, ToolCall input normalization after unmarshal, event_json_test.go and
+      TestRunCorrelationFieldsOnEmittedEvents. Local verification passed with go test ./...,
+      mage check (including govulncheck), and gofumpt.
+    next: PLAN Task 3 Expose recoverable policy flow remains pending (depends on 1 and 2).
+    context:
+      intent: Execute Task 2 from the active Aila Runtime Gap Features plan via realisera build work.
+      constraints: Library-first runtime only; no vision.yaml edits; Usage stays typed; no placeholder code.
+      scope: api.go, runner.go, event_json.go, *_test.go, README roadmap streaming row, plan task 2, this progress entry.
+  - number: 49
+    timestamp: "2026-05-11"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 1 (Bound run-scoped runtime controls) from the Aila Runtime Gap Features plan by adding per-run instructions, registered-tool ToolNames selection, RunLimits, and observable limit stop reasons.
+    commit: "Uncommitted pending user request"
+    inspiration: Task 1 closes GA-AILA-001 style seams for hosts that need phase-specific prompts and tool visibility without rebuilding the Runner, plus GA-AILA-010 style defense-in-depth limits, without a workflow DSL or per-run tool plugins.
+    discovered: streamModel returned the generic model-error stop reason alongside context.DeadlineExceeded from MaxDuration; the narrow fix maps that case to StopDurationLimit when the run enabled a duration limit.
+    verified: >-
+      Implemented RunRequest.Instructions, ToolNames (subset of Agent tools only),
+      RunLimits (MaxSteps, MaxToolCalls, MaxDuration, MaxToolOutputBytes), and
+      stop reasons tool_call_limit, output_limit, duration_limit. Runner tests
+      prove instruction and tool parity across two runs, empty ToolNames, bad
+      names rejected before Run and Stream, MaxToolCalls stopping mid-turn,
+      cumulative output cap, Limits.MaxSteps precedence, duration limit stop
+      mapping, and Stream returning an error for invalid ToolNames. Local
+      verification passed with go test ./..., mage check, and gofumpt.
+    next: PLAN Task 2 Make event replay and lineage safe remains pending.
+    context:
+      intent: Execute Task 1 from the active Aila Runtime Gap Features plan via orchestrated build work.
+      constraints: Library-first runtime only; no CLI/TUI, workflow DSL, provider registry, MCP in core, or Aila product shell; do not edit vision.yaml; Usage stays closed and typed.
+      scope: api.go, runner.go, runner_test.go, plan task status, and this progress entry.
   - number: 48
     timestamp: "2026-05-07 18:30"
     type: docs

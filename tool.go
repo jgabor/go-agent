@@ -99,6 +99,12 @@ func validateToolDefinition(definition ToolDefinition) error {
 	if definition.Constraints.MaxOutputBytes < 0 {
 		return fmt.Errorf("goagent: invalid tool definition %q: max output bytes cannot be negative", definition.Name)
 	}
+	if definition.Constraints.MaxProgressEvents < 0 {
+		return fmt.Errorf("goagent: invalid tool definition %q: max progress events cannot be negative", definition.Name)
+	}
+	if definition.Constraints.MaxProgressBytes < 0 {
+		return fmt.Errorf("goagent: invalid tool definition %q: max progress bytes cannot be negative", definition.Name)
+	}
 	return nil
 }
 

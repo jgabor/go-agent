@@ -201,10 +201,12 @@ Provider adapters can support:
 - Local or internal model gateways
 
 Custom providers implement the same stream-first interface as built-in adapters.
-Tests, fakes, and local models that only have a final response can use
-`ModelFromSimple` to convert that response into canonical events without writing
-a provider-style streamer. go-agent does not need a model marketplace to call a
-model.
+Optional `ModelCapabilitiesOf` reads static hints (provider id, model name,
+tool and streaming support, and similar flags) when a `Model` implements
+`ModelCapabilitiesProvider`; adapters that omit it remain valid. Tests, fakes,
+and local models that only have a final response can use `ModelFromSimple` to
+convert that response into canonical events without writing a provider-style
+streamer. go-agent does not need a model marketplace to call a model.
 
 ## Tools
 
@@ -240,6 +242,12 @@ Tool design follows Go conventions:
 - Struct tags describe schemas where reflection is enough.
 - `ToolDefinition` carries explicit schema, model-visible description, retry
   safety metadata, and execution constraints when reflection is not enough.
+- Custom `Tool` implementations can return a rich `ToolResult` (model `JSON`,
+  string `Metadata`, truncation or compression flags, `SourceRef`, and host-only
+  `Opaque` maps); the runner validates JSON replay safety before emitting events.
+- Optional `StreamingTool` + `EventToolProgress` emit bounded incremental output
+  during `CallStream` (see `ToolConstraints.MaxProgressEvents` / `MaxProgressBytes`);
+  transcript assembly still follows the final `ToolResult` only.
 - Tool execution belongs to your process unless you choose otherwise.
 
 Advanced definitions stay runtime-focused:
@@ -387,6 +395,13 @@ Tool retry is blocked unless `ToolSafety.Retryable` is set through
 `ToolMetadata`. Unsafe tools therefore fail explicitly instead of being repeated
 by the default allow-all policy.
 
+With an explicit `Policy`, the runtime emits `EventPolicyPending` immediately
+before each synchronous `Decide` call for run start, tool call, tool result, and
+retry decisions, then `EventPolicyDecision` with the outcome. For a denied tool
+call, setting `PolicyDecision.ToolResult` supplies a synthetic tool message and
+`EventToolResult` so the model can continue without executing the tool; omitting
+it keeps the terminal `StopPolicyDenied` stop.
+
 ## Extensions
 
 Extensions are Go code. Use interfaces, packages, and configuration the same way
@@ -425,22 +440,23 @@ on pushes and pull requests targeting `main`.
 
 This table reflects the repository today.
 
-| Area                    | Intended capability                                      | Current status | Evidence                                        |
-| ----------------------- | -------------------------------------------------------- | -------------- | ----------------------------------------------- |
-| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy`  | Started        | Root package contract and `New` facade exist    |
-| Agent loop              | Streaming model loop with tool dispatch and stop reasons | Started        | `NewRunner` consumes canonical model streams    |
-| Retries                 | Runtime retry policy and retry events                    | Started        | Observable model/runtime/tool retry exists      |
-| Tool schemas            | Go function and advanced tool metadata support           | Started        | Struct inputs and `ToolDefinition` exist        |
-| Streaming               | Structured event stream for runs                         | Started        | Runner Stream and stream assembly tests         |
-| Sessions                | Pluggable session storage                                | Started        | SessionStore and memory store exist             |
-| Providers               | OpenAI-compatible provider adapter                       | Started        | `providers/openai` streams Chat Completions SSE |
-| Observability           | Event sink and OpenTelemetry integration                 | Started        | EventSink hooks observe runtime events          |
-| Policy hooks            | Approval, limits, validation, and authorization hooks    | Started        | Run/tool/result decisions in events             |
-| Tests                   | Unit and integration coverage for runtime behavior       | Started        | API and behavior contract tests exist           |
-| Examples                | Minimal app, service, worker, and CLI examples           | Started        | Examples use `New` with local models            |
-| CLI                     | Optional developer CLI around the library                | Won't fix      | Aila owns the dogfood CLI surface               |
-| MCP adapter             | Optional adapter package outside the core                | Won't fix      | Deliberate non-goal for core                    |
-| Sub-agent orchestration | Optional coordination package outside the core           | Won't fix      | Deliberate non-goal for core                    |
+| Area                    | Intended capability                                      | Current status | Evidence                                                                                                    |
+| ----------------------- | -------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------- |
+| Public API              | `Agent`, `Runner`, `Tool`, `Session`, `Event`, `Policy`  | Started        | Root package contract and `New` facade exist                                                                |
+| Agent loop              | Streaming model loop with tool dispatch and stop reasons | Started        | `NewRunner` consumes canonical model streams                                                                |
+| Run limits & overrides  | Per-run instructions, tool subset, aggregate limits      | Started        | `RunRequest.Instructions`, `ToolNames`, `RunLimits`                                                         |
+| Retries                 | Runtime retry policy and retry events                    | Started        | Observable model/runtime/tool retry exists                                                                  |
+| Tool schemas            | Functions, metadata, rich results, streaming progress    | Started        | `ToolResult` validation; optional `StreamingTool` / `EventToolProgress`                                     |
+| Streaming               | Structured events, assembly, and JSON-safe replay        | Started        | `Stream`, `AssembleEvents`, `MarshalEvents`/`UnmarshalEvents`, optional run lineage on `RunRequest`/`Event` |
+| Sessions                | Pluggable session storage                                | Started        | SessionStore and memory store exist                                                                         |
+| Providers               | OpenAI-compatible adapter + optional capability hints    | Started        | `providers/openai` SSE + `ModelCapabilitiesOf`                                                              |
+| Observability           | Event sink and OpenTelemetry integration                 | Started        | EventSink hooks observe runtime events                                                                      |
+| Policy hooks            | Pending/decision events and recoverable tool-call denial | Started        | `EventPolicyPending`, `PolicyDecision.ToolResult` synthetic results                                         |
+| Tests                   | Unit and integration coverage for runtime behavior       | Started        | API and behavior contract tests exist                                                                       |
+| Examples                | Minimal app, service, worker, and CLI examples           | Started        | Examples use `New` with local models                                                                        |
+| CLI                     | Optional developer CLI around the library                | Won't fix      | Aila owns the dogfood CLI surface                                                                           |
+| MCP adapter             | Optional adapter package outside the core                | Won't fix      | Deliberate non-goal for core                                                                                |
+| Sub-agent orchestration | Optional coordination package outside the core           | Won't fix      | Deliberate non-goal for core                                                                                |
 
 ## Philosophy
 

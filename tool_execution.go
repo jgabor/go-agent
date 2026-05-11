@@ -39,6 +39,14 @@ func executeFunctionTool(ctx context.Context, spec ToolSpec, fn reflect.Value, i
 	return ToolResult{CallID: call.ID, Name: call.Name, Content: content}, nil
 }
 
+func (tool registeredTool) invoke(ctx context.Context, r *runner, state *runState, turnID string, call ToolCall) (ToolResult, error) {
+	if st, ok := tool.tool.(StreamingTool); ok {
+		emit := newRunnerToolProgressEmitter(state, turnID, tool.spec, call)
+		return st.CallStream(ctx, call, emit)
+	}
+	return tool.tool.Call(ctx, call)
+}
+
 func (tool registeredTool) callWithRetry(ctx context.Context, r *runner, state *runState, turnID string, call ToolCall) (ToolResult, StopReason, error) {
 	spec := cloneToolSpec(tool.spec)
 	return runRetryOperation(ctx, r, retryOperation[ToolResult]{
@@ -54,7 +62,7 @@ func (tool registeredTool) callWithRetry(ctx context.Context, r *runner, state *
 		blockReason:  RetryReasonToolRetryBlocked,
 		blockStop:    StopToolError,
 		call: func() (ToolResult, error) {
-			return tool.tool.Call(ctx, call)
+			return tool.invoke(ctx, r, state, turnID, call)
 		},
 	})
 }

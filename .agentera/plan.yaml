@@ -1,7 +1,7 @@
 header:
   level: full
   created: 2026-05-11
-  status: proposed
+  status: completed
   reviewed: 2026-05-11
   critic_issues: "7 found, 7 addressed, 0 dismissed"
   title: "Plan: Aila Runtime Gap Features"
@@ -62,72 +62,110 @@ tasks:
   - number: 1
     name: Bound run-scoped runtime controls
     depends_on: []
-    status: pending
+    status: completed
     acceptance:
       - GIVEN a host runs the same Runner for different agent phases WHEN it supplies run-scoped instructions THEN only that run sees the override and later runs keep the Agent default.
       - GIVEN a host limits model-visible tools for one run WHEN it selects from tools registered on the Agent THEN the model sees only the selected tools and unknown tool names are rejected before execution.
       - GIVEN a host supplies an explicit empty tool selection WHEN the model turn starts THEN the model receives no tools for that run.
       - GIVEN a host sets aggregate run limits WHEN a run exceeds model steps, tool calls, wall-clock duration, or cumulative tool output THEN the run stops with an observable limit reason.
       - GIVEN Run and Stream receive equivalent run-scoped controls WHEN their events and results are compared THEN instructions, tool visibility, limits, and policy observations match.
+    evidence:
+      - Added RunLimits and RunRequest fields Instructions, ToolNames, Limits plus stop reasons StopToolCallLimit, StopOutputLimit, StopDurationLimit in api.go.
+      - Runner resolves per-run instructions and a registered-tool-only view from ToolNames (nil=all, empty=none, unknown or duplicate names error before run). Effective model-step cap prefers Limits.MaxSteps over MaxSteps.
+      - Run applies Limits.MaxDuration via context deadline; model deadline errors map to StopDurationLimit when the limit is active. MaxToolCalls and MaxToolOutputBytes stop with distinct stop reasons.
+      - Tests in runner_test.go cover scoped instructions and tools, empty tool slice, unknown and duplicate ToolNames errors, tool-call and output limits, duration stop reason, Limits.MaxSteps override, and Stream validation parity for bad ToolNames.
+      - Verification passed with go test ./..., mage check (including govulncheck), and gofumpt on touched files.
   - number: 2
     name: Make event replay and lineage safe
     depends_on: [1]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN any event emitted by the current runtime WHEN it is converted to the JSON-safe event representation and back THEN the displayable error, stop reason, usage, message, tool, decision, retry, and diagnostics facts survive roundtrip.
       - GIVEN serialized event history is replayed WHEN run assembly consumes the restored events THEN the assembled result matches the original observable transcript and stop outcome.
       - GIVEN a host supplies optional run, parent-run, task, or metadata correlation WHEN events are emitted THEN sinks and Stream consumers can correlate events without inferring lineage from text.
       - GIVEN correlation fields are omitted WHEN existing callers run unchanged THEN zero values produce no behavior change.
       - GIVEN future event kinds are added WHEN tests are written THEN each new payload must prove JSON roundtrip before the task is complete.
+    evidence:
+      - Added versioned `MarshalEvents`/`UnmarshalEvents`, `JSONEvent`, `ToJSONEvent`/`FromJSONEvent` in event_json.go with errors as strings and nested decisions mapped for persistence.
+      - Run correlation optional fields `RunID`, `ParentRunID`, `TaskID`, `Metadata` on `RunRequest` and `Event`; runner stamps them on every emitted event and deep-copies metadata in clone paths.
+      - `normalizeToolCallInPlace` restores semantic equality for `json.RawMessage` after JSON null roundtrip.
+      - Tests in event_json_test.go cover marshal roundtrip, assemble parity after JSON replay, error message preservation, unknown version rejection; runner_test.go covers correlation on `Run` events.
+      - Verification passed with `go test ./...`, `mage check` (including govulncheck), and gofumpt on touched files.
   - number: 3
     name: Expose recoverable policy flow
     depends_on: [1, 2]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN an explicit policy is about to decide on a run, retry, tool call, or tool result WHEN the runtime asks for the decision THEN a pending policy event is observable before the decision event.
       - GIVEN policy denies a tool call with a recoverable tool result WHEN the run continues THEN the model receives that denial as the tool response on the next turn.
       - GIVEN policy denies without a recoverable result WHEN the decision is applied THEN the existing policy-denied stop behavior is preserved.
       - GIVEN repeated recoverable denials occur WHEN run limits are active THEN synthetic denial results count toward the same bounded run behavior as ordinary tool outcomes.
       - GIVEN non-interactive hosts ignore pending policy events WHEN their runs execute THEN existing allow-all and synchronous policy behavior remains compatible.
+    evidence:
+      - Added `EventPolicyPending` and `shouldEmitPolicyPending` so explicit policies observe pending before `Decide` for run_start, tool_call, tool_result, and retry; default nil policy emits no pending noise.
+      - Extended `PolicyDecision` with optional `ToolResult` pointer; `callTool` applies synthetic denial path with output-limit checks, session tool message, `EventToolResult`, and increments `toolCallsExecuted` / `toolOutputSum` like real tool results.
+      - `clonePolicyDecision` / `cloneEvents` deep-copy `ToolResult`; stream assembly treats `policy_pending` as observational.
+      - Tests in runner_test.go cover recoverable denial continuation, hard deny stop, synthetic denials vs `RunLimits.MaxToolCalls`; event_history and runtime_behavior expectations updated for pending ordering.
+      - README Policy Hooks and roadmap row document pending and recoverable denial. Verification passed with `go test ./...`, `mage check`, and gofumpt.
   - number: 4
     name: Add rich tool result authoring
     depends_on: [2, 3]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN a tool returns text, structured JSON, and generic result facts WHEN the runtime emits the tool result THEN events preserve the JSON-safe content and facts without requiring product-specific interpretation.
       - GIVEN a helper-authored tool returns a richer result shape WHEN it executes THEN the helper path can populate content, structured JSON, and metadata while existing string-returning helpers still work unchanged.
       - GIVEN a result includes truncation, compression, or source-reference facts WHEN sinks observe it THEN those facts are explicit and replay-safe.
       - GIVEN metadata contains unsupported non-JSON values WHEN the result is prepared for events or replay THEN the runtime rejects or normalizes it rather than writing unreplayable state.
       - GIVEN shell-specific details are needed by a host WHEN it authors a tool THEN go-agent permits opaque host facts without adding shell ownership to core.
+    evidence:
+      - Extended `ToolResult` with `Metadata`, truncation and compression flags, `CompressionKind`, `SourceRef`, and `Opaque` map for JSON-serializable host facts.
+      - Added exported `ValidateToolResult` (tool_result.go) and runner enforcement after real tool execution and before synthetic policy denials; `cloneToolResult` deep-copies new fields; `toolResultPayloadBytes` uses full `json.Marshal` for aggregate limits.
+      - Tests in tool_result_test.go cover validation failures, rich tool emission, and event JSON roundtrip; README tool bullets and roadmap Tool schemas row updated.
+      - Verification passed with `go test ./...`, `mage check`, and gofumpt.
   - number: 5
     name: Stream long-running tool progress
     depends_on: [2, 4]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN a tool can report incremental progress WHEN it runs through the runtime THEN progress events are ordered, correlated with the tool call, and followed by exactly one final tool result or terminal error.
       - GIVEN a non-streaming tool runs WHEN it does not opt into progress THEN existing single-result behavior is unchanged.
       - GIVEN context cancellation occurs while a tool is reporting progress WHEN the tool observes cancellation THEN the run stops visibly without hiding background work.
       - GIVEN progress output is large or frequent WHEN sinks consume it THEN ordering and boundedness rules prevent ambiguous or unbounded event streams.
       - GIVEN progress events are replayed from JSON WHEN history is inspected THEN progress remains observational and does not alter transcript assembly unless included in the final tool result.
+    evidence:
+      - Added `ToolProgress`, `ToolProgressEmitter`, optional `StreamingTool.CallStream`, `EventToolProgress`, and `runnerToolProgressEmitter` with per-invocation caps (`ToolConstraints.MaxProgressEvents` / `MaxProgressBytes`, runner defaults 1024 / 512 KiB).
+      - `registeredTool.invoke` routes streaming vs `Call`; `Emit` checks context, validates progress JSON, assigns monotonic `Seq`, and maps cancel/deadline tool errors to `StopCanceled` / `StopDurationLimit` in `callTool`.
+      - `stream_assembly` and `MarshalEvents` treat tool progress as observational; `stream_assembly_test` proves assembly ignores inserted progress; `streaming_tool_test.go` covers progress ordering, JSON replay, cancellation, and max-event bound.
+      - README documents streaming tools; `tool_test` rejects negative progress constraint fields. Verification passed with `go test ./...`, `mage check`, and gofumpt.
   - number: 6
     name: Expand model and provider surfaces incrementally
     depends_on: [2]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN a model exposes optional capability metadata WHEN a host asks for it THEN the host can learn provider/model identity, context limits, tool support, streaming support, and reasoning support without requiring every Model to implement introspection.
       - GIVEN a model does not expose capability metadata WHEN a host checks for it THEN the base Model contract still works unchanged.
       - GIVEN a new provider adapter is added WHEN its stream is consumed THEN it emits the same canonical event grammar, cancellation behavior, diagnostics boundaries, replay safety, and Run/Stream parity as existing providers.
       - GIVEN provider credentials, registry selection, device-code login, account choice, or pricing would be needed WHEN provider work is scoped THEN those concerns stay host-owned and absent from go-agent.
       - GIVEN OpenAI Realtime or another non-SSE protocol is considered WHEN it cannot faithfully implement the current Model.Stream contract THEN it is deferred or split into a separate design decision before coding.
+    evidence:
+      - Added `ModelCapabilities`, `ModelCapabilitiesProvider`, and `ModelCapabilitiesOf` for optional host introspection without changing the base `Model` contract.
+      - `openai.ChatModel` implements `ModelCapabilitiesProvider` with provider id, model id, and tool/streaming/reasoning support flags; package docs state SSE contract, host-owned credentials, and deferral of non-Stream protocols.
+      - Tests in `model_capabilities_test.go` and `providers/openai/openai_test.go`; README Providers & Models and roadmap Providers row updated.
+      - Verification passed with `go test ./...`, `mage check`, and gofumpt.
   - number: 7
     name: Sync docs, roadmap, state, and verification
     depends_on: [1, 2, 3, 4, 5, 6]
-    status: pending
+    status: completed
     acceptance:
       - GIVEN the runtime contracts change WHEN public docs are reviewed THEN README product text, roadmap status, examples if affected, and AGENTS.md guidance reflect repository reality without becoming implementation diaries.
       - GIVEN the Aila gap document is used as the source backlog WHEN the plan completes THEN completed, deferred, and non-request items are clear enough for Aila-side planning.
       - GIVEN TODO and Agentera state are reviewed WHEN final sync runs THEN stale completed work is archived or removed and remaining deferred items still match project direction.
       - GIVEN local verification runs WHEN the plan is ready to hand off THEN mage check succeeds or exact failing gates and blockers are recorded.
+    evidence:
+      - README Features & Roadmap gained a Run limits & overrides row; AGENTS.md Current Reality lists replay, correlation, policy, streaming tools, and model capability seams.
+      - `docs/aila-gap-feature-requests.md` documents GA-AILA-001..010 resolution vs deferred multi-provider work; TODO.md records plan closure under Done.
+      - CHANGELOG [Unreleased] summarizes the library runtime batch; this progress entry records verification.
+      - Verification passed with `mage check` (go test, vet, lint, govulncheck, tidyCheck).
 overall_acceptance:
   - GIVEN Aila embeds go-agent as its runtime foundation WHEN it needs per-phase prompts/tools, visible approval, long-running tool progress, replayable events, run lineage, and bounded autonomy THEN those needs are served by generic go-agent primitives rather than Aila-specific product code in core.
   - GIVEN existing go-agent callers upgrade WHEN they do not use the new optional seams THEN current Agent, Runner, Model, Tool, Session, Event, Policy, Run, and Stream behavior remains compatible.

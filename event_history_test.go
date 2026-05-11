@@ -14,15 +14,18 @@ func TestRuntimeHistoryCorrelatesRunStreamSinkAndFinalResult(t *testing.T) {
 	runResult, runObserved := runEventHistoryScenario(t, false)
 	streamEvents, streamObserved := streamEventHistoryScenario(t)
 
-	wantKinds := append([]goagent.EventKind{goagent.EventPolicyDecision}, toolCallEvents()...)
+	wantKinds := append([]goagent.EventKind{goagent.EventPolicyPending, goagent.EventPolicyDecision}, toolCallEvents()...)
 	wantKinds = append(wantKinds,
 		goagent.EventToolCall,
+		goagent.EventPolicyPending,
 		goagent.EventPolicyDecision,
 		goagent.EventRetry,
 		goagent.EventRetry,
+		goagent.EventPolicyPending,
 		goagent.EventPolicyDecision,
 		goagent.EventRetry,
 		goagent.EventRetry,
+		goagent.EventPolicyPending,
 		goagent.EventPolicyDecision,
 		goagent.EventToolResult,
 	)

@@ -1,4 +1,12 @@
 // Package openai adapts OpenAI-compatible Chat Completions SSE APIs to goagent.Model.
+//
+// ChatModel.Stream emits the canonical go-agent event grammar (text deltas, tool-call
+// deltas, usage, finish, terminal errors, stops). HTTP configuration and credentials
+// stay host-owned. ChatModel implements goagent.ModelCapabilitiesProvider for optional
+// static capability hints.
+//
+// Protocols that cannot honor the streaming Model contract (for example WebSocket-only
+// APIs) should use a separate adapter or design follow-up rather than stretching this one.
 package openai
 
 import (
@@ -157,6 +165,18 @@ func (m ChatModel) baseURL() string {
 		return m.BaseURL
 	}
 	return defaultBaseURL
+}
+
+// ModelCapabilities implements goagent.ModelCapabilitiesProvider.
+func (m ChatModel) ModelCapabilities() goagent.ModelCapabilities {
+	return goagent.ModelCapabilities{
+		Provider:          providerName,
+		ModelID:           strings.TrimSpace(m.Model),
+		MaxContextTokens:  0,
+		SupportsTools:     true,
+		SupportsStreaming: true,
+		SupportsReasoning: true,
+	}
 }
 
 func (m ChatModel) client() *http.Client {

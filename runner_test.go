@@ -656,3 +656,454 @@ func (m *schemaMutatingModel) Stream(ctx context.Context, request goagent.TurnRe
 	goagent.StreamTurnResult(turn, emit)
 	return nil
 }
+
+func TestRunScopedInstructionsAndToolNames(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "OK"}, StopReason: goagent.StopComplete},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Again."}, StopReason: goagent.StopComplete},
+	}}
+	aTool, err := goagent.NewTool("alpha", "alpha tool", func(context.Context, string) (string, error) {
+		return "a", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bTool, err := goagent.NewTool("beta", "beta tool", func(context.Context, string) (string, error) {
+		return "b", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Instructions: "agent default",
+		Model:        model,
+		Tools:        []goagent.Tool{aTool, bTool},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runner.Run(context.Background(), goagent.RunRequest{
+		Input:        "hi",
+		Instructions: "run scoped",
+		ToolNames:    []string{"beta"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := model.requests[0]
+	if req.Instructions != "run scoped" {
+		t.Fatalf("Instructions = %q", req.Instructions)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "beta" {
+		t.Fatalf("Tools = %+v", req.Tools)
+	}
+	_, err = runner.Run(context.Background(), goagent.RunRequest{Input: "again"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req2 := model.requests[1]
+	if req2.Instructions != "agent default" || len(req2.Tools) != 2 {
+		t.Fatalf("second run instructions=%q tools=%d", req2.Instructions, len(req2.Tools))
+	}
+}
+
+func TestRunToolNamesEmptySliceHidesTools(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "no tools"}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "x", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runner.Run(context.Background(), goagent.RunRequest{Input: "x", ToolNames: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(model.requests[0].Tools) != 0 {
+		t.Fatalf("want 0 tools, got %d", len(model.requests[0].Tools))
+	}
+}
+
+func TestRunToolNamesUnknownReturnsError(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "OK"}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "x", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runner.Run(context.Background(), goagent.RunRequest{ToolNames: []string{"nope"}})
+	if err == nil {
+		t.Fatal("expected error for unknown tool name")
+	}
+}
+
+func TestRunToolNamesDuplicateReturnsError(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "OK"}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "x", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runner.Run(context.Background(), goagent.RunRequest{ToolNames: []string{"weather", "weather"}})
+	if err == nil {
+		t.Fatal("expected error for duplicate tool name")
+	}
+}
+
+func TestRunLimitsMaxToolCalls(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{
+			{ID: "c1", Name: "weather", Input: json.RawMessage(`{"x":"austin"}`)},
+			{ID: "c2", Name: "weather", Input: json.RawMessage(`{"x":"austin"}`)},
+		}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "sunny", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:    "q",
+		Limits:   goagent.RunLimits{MaxToolCalls: 1},
+		MaxSteps: 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopToolCallLimit {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunLimitsMaxToolOutputBytes(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "c1", Name: "weather", Input: json.RawMessage(`{"x":"austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "hello!", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:  "q",
+		Limits: goagent.RunLimits{MaxToolOutputBytes: 5},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopOutputLimit {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunLimitsMaxDurationStopReason(t *testing.T) {
+	model := goagent.ModelFromSimple(goagent.SimpleModelFunc(func(ctx context.Context, _ goagent.TurnRequest) (goagent.TurnResult, error) {
+		<-ctx.Done()
+		return goagent.TurnResult{}, ctx.Err()
+	}))
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:    "q",
+		Limits:   goagent.RunLimits{MaxDuration: 50 * time.Millisecond},
+		MaxSteps: 4,
+	})
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	if result.StopReason != goagent.StopDurationLimit {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunLimitsMaxDurationDuringRetrySleep(t *testing.T) {
+	modelErr := errors.New("transient")
+	model := goagent.ModelFromSimple(goagent.SimpleModelFunc(func(context.Context, goagent.TurnRequest) (goagent.TurnResult, error) {
+		return goagent.TurnResult{}, modelErr
+	}))
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model: model,
+		Retry: goagent.RetryPolicy{
+			MaxAttempts: 2,
+			Delay:       200 * time.Millisecond,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:  "q",
+		Limits: goagent.RunLimits{MaxDuration: 20 * time.Millisecond},
+	})
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	if result.StopReason != goagent.StopDurationLimit {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunLimitsParentDeadlineBeforeMaxDurationIsCanceled(t *testing.T) {
+	model := goagent.ModelFromSimple(goagent.SimpleModelFunc(func(ctx context.Context, _ goagent.TurnRequest) (goagent.TurnResult, error) {
+		<-ctx.Done()
+		return goagent.TurnResult{}, ctx.Err()
+	}))
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	result, err := runner.Run(ctx, goagent.RunRequest{
+		Input:  "q",
+		Limits: goagent.RunLimits{MaxDuration: 200 * time.Millisecond},
+	})
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	if result.StopReason != goagent.StopCanceled {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+func TestRunLimitsMaxStepsOverridesRequestMaxSteps(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{{ID: "c1", Name: "weather", Input: json.RawMessage(`{"x":"austin"}`)}}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Done."}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:    "q",
+		MaxSteps: 99,
+		Limits:   goagent.RunLimits{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopStepLimit {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+}
+
+type spyWeatherTool struct {
+	calls int
+}
+
+func (t *spyWeatherTool) Name() string { return "weather" }
+
+func (t *spyWeatherTool) Description() string { return "test weather" }
+
+func (t *spyWeatherTool) Schema() goagent.ToolSchema { return goagent.ToolSchema{"type": "object"} }
+
+func (t *spyWeatherTool) Call(context.Context, goagent.ToolCall) (goagent.ToolResult, error) {
+	t.calls++
+	return goagent.ToolResult{Content: "real tool ran"}, nil
+}
+
+func TestRecoverablePolicyDenialSkipsToolAndContinues(t *testing.T) {
+	denyContent := "policy synthetic denial"
+	policy := goagent.PolicyFunc(func(_ context.Context, d goagent.Decision) (goagent.PolicyDecision, error) {
+		if d.Kind == goagent.DecisionToolCall && d.ToolCall.Name == "weather" {
+			tr := goagent.ToolResult{Content: denyContent, Name: "weather"}
+			return goagent.PolicyDecision{Allowed: false, Reason: "blocked", ToolResult: &tr}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	spy := &spyWeatherTool{}
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}},
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "after denial"}, StopReason: goagent.StopComplete},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{spy}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "x?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopComplete {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+	if spy.calls != 0 {
+		t.Fatalf("tool invoked %d times", spy.calls)
+	}
+	if len(model.requests) != 2 {
+		t.Fatalf("model turns = %d", len(model.requests))
+	}
+	msgs := model.requests[1].Messages
+	var saw bool
+	for _, m := range msgs {
+		if m.Role == goagent.RoleTool && m.Content == denyContent {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Fatalf("second turn did not see synthetic tool message: %#v", msgs)
+	}
+	var kinds []goagent.EventKind
+	for _, e := range result.Events {
+		kinds = append(kinds, e.Kind)
+	}
+	if !slices.Contains(kinds, goagent.EventPolicyPending) || !slices.Contains(kinds, goagent.EventToolResult) {
+		t.Fatalf("missing pending or tool result: %v", kinds)
+	}
+}
+
+func TestPolicyDenyWithoutToolResultStillStops(t *testing.T) {
+	policy := goagent.PolicyFunc(func(_ context.Context, d goagent.Decision) (goagent.PolicyDecision, error) {
+		if d.Kind == goagent.DecisionToolCall {
+			return goagent.PolicyDecision{Allowed: false, Reason: "hard deny"}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	spy := &spyWeatherTool{}
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{weatherCall("call-1")}},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{spy}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopPolicyDenied {
+		t.Fatalf("StopReason = %q", result.StopReason)
+	}
+	if spy.calls != 0 {
+		t.Fatalf("tool should not run on hard deny")
+	}
+}
+
+func TestSyntheticPolicyDenialsCountTowardMaxToolCalls(t *testing.T) {
+	deny := goagent.ToolResult{Content: "no", Name: "weather"}
+	policy := goagent.PolicyFunc(func(_ context.Context, d goagent.Decision) (goagent.PolicyDecision, error) {
+		if d.Kind == goagent.DecisionToolCall {
+			return goagent.PolicyDecision{Allowed: false, ToolResult: &deny}, nil
+		}
+		return goagent.PolicyDecision{Allowed: true}, nil
+	})
+	spy := &spyWeatherTool{}
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{ToolCalls: []goagent.ToolCall{weatherCall("c1")}},
+		{ToolCalls: []goagent.ToolCall{weatherCall("c2")}},
+		{ToolCalls: []goagent.ToolCall{weatherCall("c3")}},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{spy}, Policy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:  "x",
+		Limits: goagent.RunLimits{MaxToolCalls: 2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != goagent.StopToolCallLimit {
+		t.Fatalf("StopReason = %q want tool_call_limit", result.StopReason)
+	}
+	if spy.calls != 0 {
+		t.Fatalf("real tool ran %d times", spy.calls)
+	}
+}
+
+func TestRunCorrelationFieldsOnEmittedEvents(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "Hi"}, StopReason: goagent.StopComplete},
+	}}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{
+		Input:       "x",
+		RunID:       "custom-run",
+		ParentRunID: "parent-1",
+		TaskID:      "task-9",
+		Metadata:    map[string]string{"lane": "alpha"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, ev := range result.Events {
+		if ev.RunID != "custom-run" {
+			t.Fatalf("event %d RunID = %q", i, ev.RunID)
+		}
+		if ev.ParentRunID != "parent-1" || ev.TaskID != "task-9" {
+			t.Fatalf("event %d lineage = %q %q", i, ev.ParentRunID, ev.TaskID)
+		}
+		if ev.Metadata == nil || ev.Metadata["lane"] != "alpha" {
+			t.Fatalf("event %d metadata = %#v", i, ev.Metadata)
+		}
+	}
+}
+
+func TestStreamRunScopedValidationError(t *testing.T) {
+	model := &recordingModel{turns: []goagent.TurnResult{
+		{Message: goagent.Message{Role: goagent.RoleAssistant, Content: "OK"}, StopReason: goagent.StopComplete},
+	}}
+	tool, err := goagent.NewTool("weather", "w", func(context.Context, string) (string, error) {
+		return "x", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{Model: model, Tools: []goagent.Tool{tool}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := runner.Stream(context.Background(), goagent.RunRequest{ToolNames: []string{"nope"}})
+	if err == nil {
+		t.Fatal("expected stream error")
+	}
+	if ch != nil {
+		t.Fatal("expected nil channel")
+	}
+}

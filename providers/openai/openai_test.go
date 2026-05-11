@@ -479,6 +479,23 @@ func TestChatModelValidatesConfiguration(t *testing.T) {
 	}
 }
 
+func TestChatModelModelCapabilitiesProvider(t *testing.T) {
+	m := openai.ChatModel{Model: "gpt-test", APIKey: "test-key"}
+	caps, ok := goagent.ModelCapabilitiesOf(m)
+	if !ok {
+		t.Fatal("expected ChatModel to implement ModelCapabilitiesProvider")
+	}
+	if caps.Provider != "openai-compatible" || caps.ModelID != "gpt-test" {
+		t.Fatalf("capabilities = %+v", caps)
+	}
+	if !caps.SupportsTools || !caps.SupportsStreaming || !caps.SupportsReasoning {
+		t.Fatalf("expected capability flags: %+v", caps)
+	}
+	if caps.MaxContextTokens != 0 {
+		t.Fatalf("MaxContextTokens = %d, want unknown 0", caps.MaxContextTokens)
+	}
+}
+
 func streamChatModel(model openai.ChatModel, request goagent.TurnRequest) ([]goagent.Event, error) {
 	var events []goagent.Event
 	err := model.Stream(context.Background(), request, func(event goagent.Event) {

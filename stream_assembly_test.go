@@ -143,6 +143,35 @@ func TestAssembleStreamRejectsMismatchedTerminalErrorDeterministically(t *testin
 	}
 }
 
+func TestAssembleEventsIgnoresToolProgressObservations(t *testing.T) {
+	ev := canonicalAssemblyEvents()
+	insert := goagent.Event{
+		Sequence:     12,
+		Kind:         goagent.EventToolProgress,
+		TurnID:       "turn-1",
+		ToolCallID:   "call_weather",
+		ToolProgress: goagent.ToolProgress{CallID: "call_weather", Name: "weather", Kind: goagent.ToolProgressOutput, Text: "partial", Seq: 1},
+	}
+	out := append([]goagent.Event(nil), ev[:11]...)
+	out = append(out, insert)
+	for i := 11; i < len(ev); i++ {
+		e := ev[i]
+		e.Sequence++
+		out = append(out, e)
+	}
+	a1, err := goagent.AssembleEvents(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err := goagent.AssembleEvents(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a1.Messages, a2.Messages) || !reflect.DeepEqual(a1.ToolResults, a2.ToolResults) || a1.Text != a2.Text {
+		t.Fatalf("assembly changed with tool_progress: a1=%+v a2=%+v", a1, a2)
+	}
+}
+
 func TestAssembleEventsRejectsContradictoryTerminalFacts(t *testing.T) {
 	providerErr := errors.New("provider failed")
 	tests := []struct {

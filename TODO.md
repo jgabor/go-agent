@@ -35,6 +35,7 @@ also track repository bookkeeping that should not appear in the README roadmap.
 - [x] Complete streaming-primary runtime contract freshness checkpoint.
 - [x] Resolve Task 2 typed-usage blocker.
 - [x] Complete Chat Completions Streaming Fidelity freshness checkpoint.
+- [x] Complete Aila Runtime Gap Features plan (tasks 1–6): run overrides and limits, JSON replay and correlation, policy pending and recoverable denials, rich tool results, streaming tool progress, optional model capability hints.
 
 ## Now
 

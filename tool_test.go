@@ -215,6 +215,7 @@ func TestNewToolFromDefinitionRejectsInvalidMetadata(t *testing.T) {
 		{name: "nil schema", mutate: func(def *goagent.ToolDefinition) { def.Schema = nil }, wantErr: "schema cannot be nil", wantPrefix: "invalid tool definition"},
 		{name: "negative timeout", mutate: func(def *goagent.ToolDefinition) { def.Constraints.Timeout = -time.Second }, wantErr: "timeout cannot be negative", wantPrefix: "invalid tool definition"},
 		{name: "negative output", mutate: func(def *goagent.ToolDefinition) { def.Constraints.MaxOutputBytes = -1 }, wantErr: "max output bytes cannot be negative", wantPrefix: "invalid tool definition"},
+		{name: "negative progress events", mutate: func(def *goagent.ToolDefinition) { def.Constraints.MaxProgressEvents = -1 }, wantErr: "max progress events cannot be negative", wantPrefix: "invalid tool definition"},
 		{name: "bad function", mutate: func(def *goagent.ToolDefinition) {
 			def.Function = func(context.Context) (string, error) { return "", nil }
 		}, wantErr: "func(context.Context, string|struct) (string, error)"},

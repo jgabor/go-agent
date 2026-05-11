@@ -6,6 +6,13 @@ also track repository bookkeeping that should not appear in the README roadmap.
 
 ## Now
 
+- [ ] Preserve provider reasoning fields across OpenAI-compatible tool-call loops.
+  - Trigger: Aila config smoke passes non-tool and streaming calls against OpenAI-compatible DeepSeek models, but tool calls fail with DeepSeek `400`: `The reasoning_content in the thinking mode must be passed back to the API.`
+  - Current behavior: `providers/openai.ChatModel` maps assistant/tool-call messages through the common go-agent event/session shape, but provider-specific assistant fields such as `reasoning_content` are not preserved and replayed when a tool result is sent back to the provider.
+  - Desired behavior: OpenAI-compatible providers that require reasoning replay during tool-call loops can round-trip `assistant.reasoning_content` without exposing it as normal assistant text, leaking it into unsafe diagnostics, or forcing hosts to use deprecated non-thinking aliases.
+  - Secondary follow-up: consider typed provider options for thinking controls such as `thinking: {"type":"disabled"}`, but do not make thinking toggles the prerequisite for correct replay semantics.
+  - Tests: add provider adapter coverage for streaming/non-streaming `reasoning_content`, assistant/tool replay that includes required reasoning fields, a failing-provider fixture matching the DeepSeek `400`, successful tool-call replay when reasoning is preserved, and diagnostics that do not expose API keys or raw hidden reasoning beyond bounded test fixtures.
+
 ## Next
 
 ## Later

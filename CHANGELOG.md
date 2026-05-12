@@ -5,6 +5,7 @@
 ### Documentation
 
 - Refreshed `docs/aila-gap-feature-requests.md` resolution matrix and README/AGENTS host-oriented notes for per-run tools, policy cancel vs deny, capability facts, and deferred non-OpenAI providers (no new runtime promises).
+- Refreshed README and provider docs for OpenAI-compatible hidden reasoning replay, typed thinking controls, and typed reasoning-token usage without adding product/provider registry promises.
 - Archived completed Planera snapshot for Complete Aila Runtime Gap Follow-ups and removed active `.agentera/plan.yaml` after Task 6 `mage check`.
 
 ### Added

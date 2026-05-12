@@ -254,6 +254,7 @@ func (r *eventReducer) finalMessage(index int, event Event) error {
 	message := Message{Role: RoleAssistant, Blocks: r.messageBlocks()}
 	message.Content = finalText(message.Blocks)
 	message.ToolCalls = finalToolCalls(message.Blocks)
+	message.HiddenReasoning = event.Message.HiddenReasoning
 	if !event.Message.empty() && !sameFinalMessage(event.Message, message) {
 		return divergence(index, "message_final contradicts streamed blocks")
 	}
@@ -403,6 +404,9 @@ func sameFinalMessage(got Message, want Message) bool {
 	if len(got.ToolCalls) > 0 && !sameToolCalls(got.ToolCalls, want.ToolCalls) {
 		return false
 	}
+	if got.HiddenReasoning != "" && got.HiddenReasoning != want.HiddenReasoning {
+		return false
+	}
 	return true
 }
 
@@ -436,7 +440,7 @@ func terminalErrorIndex(events []Event) int {
 }
 
 func (m Message) empty() bool {
-	return m.Role == "" && m.Content == "" && len(m.Blocks) == 0 && m.Name == "" && m.ToolCallID == "" && len(m.ToolCalls) == 0
+	return m.Role == "" && m.Content == "" && len(m.Blocks) == 0 && m.HiddenReasoning == "" && m.Name == "" && m.ToolCallID == "" && len(m.ToolCalls) == 0
 }
 
 // IsStreamDivergence reports whether err is a deterministic reducer divergence.

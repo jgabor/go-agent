@@ -1,0 +1,126 @@
+header:
+  level: full
+  created: 2026-05-12
+  status: completed
+  reviewed: 2026-05-12
+  critic_issues: "13 found, 13 addressed, 0 dismissed"
+  title: "Plan: Preserve OpenAI-Compatible Reasoning Replay"
+what: >-
+  Preserve provider-hidden assistant reasoning across OpenAI-compatible
+  thinking-mode tool-call loops so providers that require reasoning replay can
+  continue after tool execution without exposing hidden reasoning as normal
+  assistant text.
+why: >-
+  Aila dogfooding found DeepSeek 400 failures when tool-call loops omit prior
+  reasoning_content. OpenAI-compatible providers increasingly expose hidden
+  reasoning fields, thinking controls, and reasoning-token accounting. go-agent
+  should support that reusable runtime seam without forcing hosts onto
+  non-thinking aliases or adapter-private replay workarounds.
+constraints: >-
+  Preserve go-agent as a library-first runtime. Do not add a provider registry,
+  credential discovery, pricing or cost ownership, CLI or TUI behavior, workflow
+  DSL, Aila product behavior, arbitrary request pass-through maps, or unbounded
+  diagnostics. Hidden reasoning is provider replay state, not normal assistant
+  text for users or logs.
+scope:
+  included:
+    - OpenAI-compatible hidden reasoning preservation for assistant tool-call turns.
+    - Streaming delta and whole-message reasoning response shapes.
+    - Tool-call loop replay, including DeepSeek-style required-reasoning failures.
+    - Bounded provider-package thinking controls where documented by OpenAI-compatible APIs.
+    - Typed reasoning-token accounting when providers supply it.
+    - Public documentation, project-state refresh, and local verification.
+  excluded:
+    - Aila UX, config, model-selection UI, artifact resolution, or product policy.
+    - Provider credential discovery, account selection, pricing, marketplace, or global model catalog behavior.
+    - Anthropic, Responses, Realtime, or other non-Chat-Completions provider families.
+    - Disabling thinking as the prerequisite workaround for correct replay semantics.
+    - Generic untyped maps for provider requests, diagnostics, usage, or replay state.
+  deferred:
+    - Provider-specific thinking controls outside OpenAI-compatible Chat Completions.
+    - Broader model fact catalog expansion unless directly needed for selected adapter reasoning facts.
+design: >-
+  Lock the replay contract before implementation. Treat hidden reasoning as
+  provider replay state attached to the assistant turn that produced it,
+  especially assistant turns with tool calls. Preserve it only for provider
+  replay while keeping normal text projections, user-visible assistant content,
+  errors, diagnostics, and routine event inspection free of raw hidden reasoning.
+  The implementation must justify any public core surface it changes; otherwise
+  replay should stay as narrow and provider-owned as the contract allows.
+  Mandatory replay lands before optional controls or accounting. Documentation
+  and status updates move last, after behavior is covered by tests.
+tasks:
+  - number: 1
+    name: Lock hidden reasoning replay contract
+    depends_on: []
+    status: completed
+    acceptance:
+      - GIVEN provider docs require hidden reasoning replay for assistant tool-call turns WHEN the contract is read THEN hidden reasoning is defined as replay state paired with the assistant tool-call message rather than normal assistant text.
+      - GIVEN a runtime surface would expose hidden reasoning WHEN the implementation approach is chosen THEN that exposure is either documented as a deliberate replay-only channel or rejected in favor of narrower provider-owned state.
+      - GIVEN session or history retains an assistant message with hidden reasoning WHEN a later provider turn is prepared THEN the hidden reasoning remains attached only to that original assistant message.
+      - GIVEN the corresponding assistant message is intentionally absent from retained history WHEN a later provider turn is prepared THEN its hidden reasoning is not replayed independently.
+      - GIVEN errors, diagnostics, serialized events, or test logs are produced WHEN hidden reasoning exists THEN API keys, prompt content, tool payloads, and raw hidden reasoning are absent by default or limited to explicit bounded fixtures.
+    test_proportionality: "One positive and one negative contract test for replay attachment, text exclusion, and diagnostics exclusion."
+  - number: 2
+    name: Preserve hidden reasoning across response shapes
+    depends_on: [1]
+    status: completed
+    acceptance:
+      - GIVEN a whole-message OpenAI-compatible response includes assistant hidden reasoning WHEN the turn is normalized THEN hidden reasoning is preserved for later replay and absent from normal assistant text.
+      - GIVEN streamed response deltas include hidden reasoning in multiple chunks WHEN the turn is normalized THEN the chunks are concatenated in order without interleaving into visible text.
+      - GIVEN visible assistant content and hidden reasoning arrive in the same turn WHEN the final assistant state is assembled THEN visible content remains the only normal assistant text projection.
+      - GIVEN hidden reasoning accompanies assistant tool calls WHEN the following provider turn is prepared THEN the assistant tool-call message includes the same hidden reasoning alongside its tool calls.
+      - GIVEN no hidden reasoning is returned WHEN provider turns are normalized THEN existing text, tool-call, usage, and stop behavior remains compatible.
+    test_proportionality: "Whole-message, streaming, mixed visible/hidden, and absent-reasoning fixtures, with at least one failure assertion for visible-text leakage."
+  - number: 3
+    name: Prove required-reasoning tool-call replay
+    depends_on: [2]
+    status: completed
+    acceptance:
+      - GIVEN an OpenAI-compatible provider returns an assistant tool call with hidden reasoning WHEN the host sends the tool result back THEN the next provider request includes hidden reasoning on the corresponding assistant tool-call message.
+      - GIVEN a DeepSeek-style fixture rejects tool-call continuation without hidden reasoning WHEN replay is omitted THEN the fixture fails with a missing-reasoning 400 response.
+      - GIVEN the same DeepSeek-style fixture receives preserved hidden reasoning WHEN the tool-call continuation runs THEN the fixture succeeds instead of returning the missing-reasoning 400 response.
+      - GIVEN multiple tool-call subturns occur before a final answer WHEN each assistant tool-call turn carries hidden reasoning THEN each retained assistant tool-call message preserves its own hidden reasoning for subsequent provider calls.
+      - GIVEN a later user turn follows a completed tool-call interaction WHEN retained history still contains the assistant tool-call messages THEN required hidden reasoning remains available for provider replay.
+    test_proportionality: "One failing and one passing DeepSeek-style fixture, plus multi-subturn, later-user-turn, and no-hidden-reasoning compatibility coverage."
+  - number: 4
+    name: Add bounded thinking controls and typed accounting
+    depends_on: [1, 2, 3]
+    status: completed
+    acceptance:
+      - GIVEN a host configures thinking enabled or disabled for an OpenAI-compatible chat provider WHEN a request is prepared THEN the provider receives the documented typed thinking control without introducing an arbitrary request map.
+      - GIVEN a host configures reasoning effort WHEN a request is prepared THEN documented reasoning effort handling remains typed and does not move into generic core options.
+      - GIVEN an unsupported thinking mode is configured WHEN a request is prepared THEN the error identifies valid values before any provider call is made.
+      - GIVEN a provider reports reasoning-token usage WHEN usage is emitted THEN the runtime exposes that count as typed token accounting with a zero value when absent.
+      - GIVEN replay semantics are tested WHEN thinking controls are left unset THEN required reasoning replay still works without disabling thinking as a workaround.
+      - GIVEN a host needs pricing, account availability, aliases, or product display names WHEN reasoning accounting is present THEN those facts remain host-owned and absent from the core runtime.
+    test_proportionality: "Enabled, disabled, invalid-value, usage-present, usage-absent, and replay-with-default-controls coverage."
+  - number: 5
+    name: Refresh public docs and project status
+    depends_on: [1, 2, 3, 4]
+    status: completed
+    acceptance:
+      - GIVEN reasoning replay behavior lands WHEN public provider documentation is read THEN OpenAI-compatible hidden reasoning replay is described without claiming a provider registry, marketplace, or pricing ownership.
+      - GIVEN typed thinking controls or reasoning accounting change public API WHEN README and package documentation are read THEN they describe the bounded provider-package surface and preserve host-owned product boundaries.
+      - GIVEN diagnostic safety matters WHEN docs or tests describe hidden reasoning THEN they state that hidden reasoning is not normal assistant text and is not emitted in unsafe diagnostics by default.
+      - GIVEN the backlog is refreshed WHEN TODO and roadmap text are read THEN the completed reasoning replay capability is recorded without documenting routine setup work.
+      - GIVEN examples are affected WHEN they are checked THEN they remain runnable or are deliberately left unchanged with rationale.
+  - number: 6
+    name: Plan-level freshness checkpoint
+    depends_on: [1, 2, 3, 4, 5]
+    status: completed
+    acceptance:
+      - GIVEN all implementation tasks are complete WHEN the full local verification gate runs THEN it succeeds or exact blockers are recorded.
+      - GIVEN the plan has finished WHEN project state is refreshed THEN changelog, TODOs, progress, and active plan status match repository reality.
+      - GIVEN another host embeds go-agent without OpenAI-compatible reasoning features WHEN it upgrades THEN existing text, tool, session, event, policy, and usage behavior remains compatible.
+      - GIVEN a maintainer reviews the final diff WHEN checking project boundaries THEN go-agent still does not own Aila product behavior, provider selection UX, credentials, pricing, or a model marketplace.
+overall_acceptance:
+  - GIVEN Aila uses OpenAI-compatible thinking models through go-agent WHEN a model calls tools and requires hidden reasoning replay THEN the tool-call loop continues without provider missing-reasoning failures.
+  - GIVEN hidden reasoning exists in provider responses WHEN hosts inspect normal assistant text, errors, diagnostics, and routine events THEN hidden reasoning is not exposed as user-visible assistant content or unsafe diagnostic detail.
+  - GIVEN providers return streamed or whole-message hidden reasoning WHEN go-agent prepares future provider turns THEN required reasoning replay is preserved according to documented provider rules.
+  - GIVEN hosts do not configure thinking controls or do not receive reasoning-token usage WHEN they upgrade THEN existing provider and runtime behavior remains compatible.
+  - GIVEN the implementation is complete WHEN documentation and state are reviewed THEN claims match repository reality and preserve the library-first boundary.
+surprises:
+  - The critic flagged the core/session boundary as the highest-risk ambiguity. The plan now requires an explicit replay-surface justification and prefers the narrowest provider-owned state that satisfies replay.
+  - The critic flagged controls and usage accounting as separate from the DeepSeek replay failure. The plan now makes replay mandatory first and isolates typed controls/accounting in a later dependent task.
+  - The critic flagged retention semantics and diagnostics as underdefined. The plan now ties hidden reasoning to retained assistant messages and requires default omission from unsafe outputs.

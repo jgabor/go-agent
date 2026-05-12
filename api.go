@@ -137,12 +137,18 @@ type TurnResult struct {
 
 // Message is one transcript entry visible to the model or session store.
 type Message struct {
-	Role       Role
-	Content    string
-	Blocks     []Block
-	Name       string
-	ToolCallID string
-	ToolCalls  []ToolCall
+	Role    Role
+	Content string
+	Blocks  []Block
+	// HiddenReasoning carries provider-hidden assistant reasoning that some
+	// OpenAI-compatible thinking APIs require to be replayed with the original
+	// assistant tool-call message. It is replay-only state: hosts and providers
+	// must not treat it as normal assistant text, expose it as model-visible text,
+	// or replay it independently from the message it belongs to.
+	HiddenReasoning string `json:"-"`
+	Name            string
+	ToolCallID      string
+	ToolCalls       []ToolCall
 }
 
 // Block is one ordered unit of transcript content.
@@ -288,6 +294,7 @@ type Usage struct {
 	TotalTokens       int
 	CachedInputTokens int
 	CacheWriteTokens  int
+	ReasoningTokens   int
 	RequestID         string
 	Provider          string
 	Model             string

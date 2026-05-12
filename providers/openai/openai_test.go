@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -47,7 +48,8 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
 		Options: openai.ChatOptions{
-			ReasoningEffort:    "low",
+			ReasoningEffort:    openai.ReasoningEffortLow,
+			Thinking:           openai.ThinkingEnabled,
 			ResponseFormat:     openai.ResponseFormat{Type: openai.ResponseFormatJSONObject},
 			IncludeStreamUsage: true,
 		},
@@ -95,7 +97,7 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 	if got.MaxCompletionTokens != 128 || got.Temperature == nil || *got.Temperature != temperature || !reflect.DeepEqual(got.Stop, []string{"END"}) {
 		t.Fatalf("request options = %+v", got)
 	}
-	if got.ReasoningEffort != "low" || got.ResponseFormat == nil || got.ResponseFormat.Type != openai.ResponseFormatJSONObject {
+	if got.ReasoningEffort != openai.ReasoningEffortLow || got.Thinking == nil || got.Thinking.Type != openai.ThinkingEnabled || got.ResponseFormat == nil || got.ResponseFormat.Type != openai.ResponseFormatJSONObject {
 		t.Fatalf("provider options = %+v", got.ResponseFormat)
 	}
 	if !got.Stream || got.StreamOptions == nil || !got.StreamOptions.IncludeUsage {
@@ -109,6 +111,331 @@ func TestChatModelSendsChatCompletionRequest(t *testing.T) {
 	}
 }
 
+func TestChatModelSendsDisabledThinkingControl(t *testing.T) {
+	var got requestBody
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTextSSE(t, w, "ok")
+	}))
+	defer server.Close()
+
+	_, err := streamChatModel(openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client(), Options: openai.ChatOptions{Thinking: openai.ThinkingDisabled}}, goagent.TurnRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Thinking == nil || got.Thinking.Type != openai.ThinkingDisabled {
+		t.Fatalf("thinking control = %+v, want disabled", got.Thinking)
+	}
+}
+
+func TestChatModelReplaysHiddenReasoningOnlyOnAssistantToolCallMessage(t *testing.T) {
+	const hiddenReasoning = "bounded hidden reasoning fixture"
+
+	var got requestBody
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"bounded hidden reasoning fixture\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-2\",\"type\":\"function\",\"function\":{\"name\":\"weather\",\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	events, err := streamChatModel(openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}, goagent.TurnRequest{
+		Messages: []goagent.Message{
+			{Role: goagent.RoleUser, Content: "Weather?"},
+			{Role: goagent.RoleAssistant, Content: "visible", HiddenReasoning: "must not replay without tool calls"},
+			{Role: goagent.RoleAssistant, HiddenReasoning: hiddenReasoning, ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`{}`)}}},
+			{Role: goagent.RoleTool, ToolCallID: "call-1", Content: "clear"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Messages[1].ReasoningContent != "" {
+		t.Fatalf("non-tool assistant reasoning replayed independently: %+v", got.Messages[1])
+	}
+	if got.Messages[2].ReasoningContent != hiddenReasoning {
+		t.Fatalf("assistant tool-call reasoning = %q, want hidden fixture", got.Messages[2].ReasoningContent)
+	}
+	assembled, err := goagent.AssembleEvents(append(events, goagent.Event{Kind: goagent.EventStop, StopReason: goagent.StopComplete}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.Text != "" || assembled.Messages[0].Content != "" {
+		t.Fatalf("hidden reasoning leaked as text: assembled=%+v", assembled)
+	}
+	if assembled.Messages[0].HiddenReasoning != hiddenReasoning {
+		t.Fatalf("assembled hidden reasoning = %q, want fixture", assembled.Messages[0].HiddenReasoning)
+	}
+	data, err := goagent.MarshalEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), hiddenReasoning) {
+		t.Fatalf("serialized events leaked hidden reasoning: %s", data)
+	}
+	assertDiagnosticsBounded(t, events)
+}
+
+func TestChatModelDoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage(t *testing.T) {
+	const hiddenReasoning = "bounded absent reasoning fixture"
+
+	var got requestBody
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Done.\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	events, err := streamChatModel(openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}, goagent.TurnRequest{
+		Messages: []goagent.Message{
+			{Role: goagent.RoleUser, Content: "Weather?"},
+			{Role: goagent.RoleTool, ToolCallID: "call-1", Content: "clear"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range got.Messages {
+		if message.ReasoningContent != "" {
+			t.Fatalf("hidden reasoning replayed without original assistant message: %+v", got.Messages)
+		}
+	}
+	data, err := goagent.MarshalEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), hiddenReasoning) {
+		t.Fatalf("serialized events leaked absent hidden reasoning: %s", data)
+	}
+	assertDiagnosticsBounded(t, events)
+}
+
+func TestChatModelAssemblesStreamingHiddenReasoningWithoutTextLeakage(t *testing.T) {
+	const hiddenReasoning = "first hidden chunk second hidden chunk"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Visible \"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"first hidden chunk \"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer.\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"second hidden chunk\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	events, err := streamChatModel(openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}, goagent.TurnRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembled, err := goagent.AssembleEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if assembled.Text != "Visible answer." || len(assembled.Messages) != 1 || assembled.Messages[0].Content != "Visible answer." {
+		t.Fatalf("visible text assembly = %+v", assembled)
+	}
+	if assembled.Messages[0].HiddenReasoning != hiddenReasoning {
+		t.Fatalf("hidden reasoning = %q, want %q", assembled.Messages[0].HiddenReasoning, hiddenReasoning)
+	}
+	for _, event := range events {
+		if event.Kind == goagent.EventTextDelta && strings.Contains(event.Text, "hidden chunk") {
+			t.Fatalf("hidden reasoning leaked into text event: %+v", event)
+		}
+	}
+	data, err := goagent.MarshalEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), hiddenReasoning) || strings.Contains(assembled.Text, "hidden chunk") {
+		t.Fatalf("hidden reasoning leaked into visible projections: text=%q events=%s", assembled.Text, data)
+	}
+}
+
+func TestChatModelDeepSeekStyleFixtureRejectsMissingReasoningReplay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got requestBody
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if hasToolResult(got.Messages) && assistantToolReasoning(got.Messages, "call-1") == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"missing reasoning_content for assistant tool-call continuation","type":"invalid_request_error","code":"missing_reasoning"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTextSSE(t, w, "ok")
+	}))
+	defer server.Close()
+
+	_, err := streamChatModel(openai.ChatModel{Model: "deepseek-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}, goagent.TurnRequest{
+		Messages: []goagent.Message{
+			{Role: goagent.RoleUser, Content: "Weather?"},
+			{Role: goagent.RoleAssistant, ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`"Austin"`)}}},
+			{Role: goagent.RoleTool, Name: "weather", ToolCallID: "call-1", Content: "clear"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "status 400") {
+		t.Fatalf("error = %v, want missing-reasoning 400", err)
+	}
+}
+
+func TestChatModelDeepSeekStyleFixtureContinuesWithPreservedReasoning(t *testing.T) {
+	const hiddenReasoning = "deepseek required reasoning"
+	var requests []requestBody
+	server := newReasoningFixtureServer(t, func(w http.ResponseWriter, got requestBody, call int) {
+		requests = append(requests, got)
+		switch call {
+		case 1:
+			writeToolCallSSE(t, w, hiddenReasoning, "call-1", "weather", `{"city":"Austin"}`)
+		case 2:
+			if got := assistantToolReasoning(got.Messages, "call-1"); got != hiddenReasoning {
+				t.Fatalf("replayed reasoning = %q, want %q", got, hiddenReasoning)
+			}
+			writeTextSSE(t, w, "clear")
+		default:
+			t.Fatalf("unexpected request %d", call)
+		}
+	})
+	defer server.Close()
+
+	runner := newOpenAITestRunner(t, server, nil)
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "clear" || result.StopReason != goagent.StopComplete {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+}
+
+func TestChatModelReasoningReplayPreservesEachToolSubturn(t *testing.T) {
+	const firstReasoning = "first hidden reasoning"
+	const secondReasoning = "second hidden reasoning"
+	var finalRequest requestBody
+	server := newReasoningFixtureServer(t, func(w http.ResponseWriter, got requestBody, call int) {
+		switch call {
+		case 1:
+			writeToolCallSSE(t, w, firstReasoning, "call-1", "weather", `{"city":"Austin"}`)
+		case 2:
+			if got := assistantToolReasoning(got.Messages, "call-1"); got != firstReasoning {
+				t.Fatalf("first replayed reasoning = %q, want %q", got, firstReasoning)
+			}
+			writeToolCallSSE(t, w, secondReasoning, "call-2", "weather", `{"city":"Dallas"}`)
+		case 3:
+			finalRequest = got
+			if got := assistantToolReasoning(got.Messages, "call-1"); got != firstReasoning {
+				t.Fatalf("retained first reasoning = %q, want %q", got, firstReasoning)
+			}
+			if got := assistantToolReasoning(got.Messages, "call-2"); got != secondReasoning {
+				t.Fatalf("retained second reasoning = %q, want %q", got, secondReasoning)
+			}
+			writeTextSSE(t, w, "done")
+		default:
+			t.Fatalf("unexpected request %d", call)
+		}
+	})
+	defer server.Close()
+
+	runner := newOpenAITestRunner(t, server, nil)
+	result, err := runner.Run(context.Background(), goagent.RunRequest{Input: "Weather?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "done" || len(finalRequest.Messages) == 0 {
+		t.Fatalf("result = %+v finalRequest=%+v", result, finalRequest)
+	}
+}
+
+func TestChatModelReasoningReplaySurvivesLaterUserTurn(t *testing.T) {
+	const hiddenReasoning = "stored hidden reasoning"
+	var laterRequest requestBody
+	store := goagent.NewMemorySessionStore()
+	server := newReasoningFixtureServer(t, func(w http.ResponseWriter, got requestBody, call int) {
+		switch call {
+		case 1:
+			writeToolCallSSE(t, w, hiddenReasoning, "call-1", "weather", `{"city":"Austin"}`)
+		case 2:
+			if got := assistantToolReasoning(got.Messages, "call-1"); got != hiddenReasoning {
+				t.Fatalf("initial continuation reasoning = %q, want %q", got, hiddenReasoning)
+			}
+			writeTextSSE(t, w, "clear")
+		case 3:
+			laterRequest = got
+			if got := assistantToolReasoning(got.Messages, "call-1"); got != hiddenReasoning {
+				t.Fatalf("later turn retained reasoning = %q, want %q", got, hiddenReasoning)
+			}
+			writeTextSSE(t, w, "still clear")
+		default:
+			t.Fatalf("unexpected request %d", call)
+		}
+	})
+	defer server.Close()
+
+	runner := newOpenAITestRunner(t, server, store)
+	if _, err := runner.Run(context.Background(), goagent.RunRequest{SessionID: "weather-session", Input: "Weather?"}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(context.Background(), goagent.RunRequest{SessionID: "weather-session", Input: "And tomorrow?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "still clear" || len(laterRequest.Messages) == 0 {
+		t.Fatalf("result = %+v laterRequest=%+v", result, laterRequest)
+	}
+}
+
+func TestChatModelToolContinuationWithoutHiddenReasoningRemainsCompatible(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got requestBody
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if reasoning := assistantToolReasoning(got.Messages, "call-1"); reasoning != "" {
+			t.Fatalf("reasoning replayed for non-reasoning provider = %q", reasoning)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTextSSE(t, w, "ok")
+	}))
+	defer server.Close()
+
+	events, err := streamChatModel(openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()}, goagent.TurnRequest{
+		Messages: []goagent.Message{
+			{Role: goagent.RoleUser, Content: "Weather?"},
+			{Role: goagent.RoleAssistant, ToolCalls: []goagent.ToolCall{{ID: "call-1", Name: "weather", Input: json.RawMessage(`"Austin"`)}}},
+			{Role: goagent.RoleTool, Name: "weather", ToolCallID: "call-1", Content: "clear"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembled, err := goagent.AssembleEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.Text != "ok" {
+		t.Fatalf("assembled text = %q", assembled.Text)
+	}
+}
+
 func TestChatModelStreamsInterleavedToolCallsUsageAndRawStopWithCanonicalEvents(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -118,7 +445,7 @@ func TestChatModelStreamsInterleavedToolCallsUsageAndRawStopWithCanonicalEvents(
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-weather\",\"type\":\"function\",\"function\":{\"name\":\"weath\",\"arguments\":\"{\\\"city\\\"\"}}]},\"finish_reason\":null}]}\n\n"))
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\":\\\"Austin\\\"}\"}},{\"index\":0,\"function\":{\"name\":\"er\",\"arguments\":\":\\\"Austin\\\"}\"}}]},\"finish_reason\":null}]}\n\n"))
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"))
-		_, _ = w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":3},\"completion_tokens_details\":{\"accepted_prediction_tokens\":2}}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":3},\"completion_tokens_details\":{\"accepted_prediction_tokens\":2,\"reasoning_tokens\":4}}}\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer server.Close()
@@ -140,7 +467,7 @@ func TestChatModelStreamsInterleavedToolCallsUsageAndRawStopWithCanonicalEvents(
 	if assembled.ToolCalls[1].ID != "call-weather" || assembled.ToolCalls[1].Name != "weather" || string(assembled.ToolCalls[1].Input) != `{"city":"Austin"}` {
 		t.Fatalf("second streamed tool call = %+v", assembled.ToolCalls[1])
 	}
-	if assembled.Usage != (goagent.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, CachedInputTokens: 3, CacheWriteTokens: 2, RequestID: "req-interleaved", Provider: "openai-compatible", Model: "gpt-test"}) {
+	if assembled.Usage != (goagent.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, CachedInputTokens: 3, CacheWriteTokens: 2, ReasoningTokens: 4, RequestID: "req-interleaved", Provider: "openai-compatible", Model: "gpt-test"}) {
 		t.Fatalf("usage = %+v", assembled.Usage)
 	}
 	for _, event := range events {
@@ -333,8 +660,8 @@ func TestChatModelStreamsUsageWhenPresentAndAllowsAbsence(t *testing.T) {
 		{name: "absent"},
 		{
 			name:      "present",
-			usageLine: "data: {\"model\":\"gpt-test\",\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":1}}}\n\n",
-			wantUsage: goagent.Usage{InputTokens: 3, OutputTokens: 2, TotalTokens: 5, CachedInputTokens: 1, RequestID: "req-usage", Provider: "openai-compatible", Model: "gpt-test"},
+			usageLine: "data: {\"model\":\"gpt-test\",\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":1},\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\n\n",
+			wantUsage: goagent.Usage{InputTokens: 3, OutputTokens: 2, TotalTokens: 5, CachedInputTokens: 1, ReasoningTokens: 2, RequestID: "req-usage", Provider: "openai-compatible", Model: "gpt-test"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -439,7 +766,7 @@ func TestChatModelRedactsProviderErrorExcerpts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"message":"Authorization: Bearer sk-test api_key=sk-test-url https://user:pass@example.test/path messages: [{role:user,content:secret prompt}] tool_args: {\"city\":\"Austin\"} HOME=/home/test","type":"invalid_request_error","code":"bad_request"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Authorization: Bearer sk-test api_key=sk-test-url https://user:pass@example.test/path messages: [{role:user,content:secret prompt}] tool_args: {\"city\":\"Austin\"} reasoning_content=hidden-chain hidden_reasoning='private thoughts' HOME=/home/test","type":"invalid_request_error","code":"bad_request"}}`))
 	}))
 	defer server.Close()
 
@@ -450,7 +777,7 @@ func TestChatModelRedactsProviderErrorExcerpts(t *testing.T) {
 		t.Fatalf("error = %T, want ProviderError", err)
 	}
 	excerpt := strings.ToLower(providerErr.Diagnostics.Excerpt)
-	for _, forbidden := range []string{"sk-test", "user:pass", "role:user", "secret prompt", `"city":"austin"`, "/home/test"} {
+	for _, forbidden := range []string{"sk-test", "user:pass", "role:user", "secret prompt", `"city":"austin"`, "hidden-chain", "private thoughts", "/home/test"} {
 		if strings.Contains(excerpt, forbidden) {
 			t.Fatalf("excerpt contains %q: %q", forbidden, providerErr.Diagnostics.Excerpt)
 		}
@@ -468,6 +795,34 @@ func TestChatOptionsSurfaceIsTyped(t *testing.T) {
 				t.Fatalf("%s.%s is an untyped pass-through map", typ.Name(), field.Name)
 			}
 		}
+	}
+}
+
+func TestChatModelRejectsInvalidThinkingOptionsBeforeProviderRequest(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		options openai.ChatOptions
+		want    string
+	}{
+		{name: "thinking", options: openai.ChatOptions{Thinking: openai.ThinkingMode("verbose")}, want: "unsupported thinking mode \"verbose\" (valid: enabled, disabled)"},
+		{name: "effort", options: openai.ChatOptions{ReasoningEffort: openai.ReasoningEffort("extreme")}, want: "unsupported reasoning effort \"extreme\" (valid: low, medium, high)"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var requests int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				t.Fatal("provider request should not be sent for invalid options")
+			}))
+			defer server.Close()
+
+			err := (openai.ChatModel{Model: "gpt-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client(), Options: tt.options}).Stream(context.Background(), goagent.TurnRequest{}, func(goagent.Event) {})
+			if err == nil || err.Error() != "goagent/openai: "+tt.want {
+				t.Fatalf("error = %v, want %q", err, "goagent/openai: "+tt.want)
+			}
+			if requests != 0 {
+				t.Fatalf("requests = %d, want 0", requests)
+			}
+		})
 	}
 }
 
@@ -612,6 +967,94 @@ func sensitiveTurnRequest() goagent.TurnRequest {
 	}
 }
 
+func newOpenAITestRunner(t *testing.T, server *httptest.Server, store goagent.SessionStore) goagent.Runner {
+	t.Helper()
+	weather, err := goagent.NewTool("weather", "Get weather.", func(context.Context, string) (string, error) {
+		return "clear", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := goagent.NewRunner(goagent.Agent{
+		Model:        openai.ChatModel{Model: "deepseek-test", APIKey: "test-key", BaseURL: server.URL, HTTPClient: server.Client()},
+		Tools:        []goagent.Tool{weather},
+		SessionStore: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runner
+}
+
+func newReasoningFixtureServer(t *testing.T, handle func(http.ResponseWriter, requestBody, int)) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	call := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got requestBody
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		mu.Lock()
+		call++
+		current := call
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		handle(w, got, current)
+	}))
+}
+
+func hasToolResult(messages []requestMessage) bool {
+	for _, message := range messages {
+		if message.Role == "tool" {
+			return true
+		}
+	}
+	return false
+}
+
+func assistantToolReasoning(messages []requestMessage, callID string) string {
+	for _, message := range messages {
+		if message.Role != "assistant" {
+			continue
+		}
+		for _, call := range message.ToolCalls {
+			if call.ID == callID {
+				return message.ReasoningContent
+			}
+		}
+	}
+	return ""
+}
+
+func writeToolCallSSE(t *testing.T, w http.ResponseWriter, reasoning, callID, name, args string) {
+	t.Helper()
+	writeSSE(t, w, map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"reasoning_content": reasoning}, "finish_reason": nil}}})
+	writeSSE(t, w, map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": callID, "type": "function", "function": map[string]any{"name": name, "arguments": args}}}}, "finish_reason": nil}}})
+	writeSSE(t, w, map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "tool_calls"}}})
+	_, _ = w.Write([]byte("data: [DONE]\n\n"))
+}
+
+func writeTextSSE(t *testing.T, w http.ResponseWriter, text string) {
+	t.Helper()
+	writeSSE(t, w, map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": text}, "finish_reason": nil}}})
+	writeSSE(t, w, map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
+	_, _ = w.Write([]byte("data: [DONE]\n\n"))
+}
+
+func writeSSE(t *testing.T, w http.ResponseWriter, payload any) {
+	t.Helper()
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = w.Write([]byte("data: "))
+	_, _ = w.Write(data)
+	_, _ = w.Write([]byte("\n\n"))
+}
+
 type requestBody struct {
 	Model               string                 `json:"model"`
 	Messages            []requestMessage       `json:"messages"`
@@ -619,10 +1062,15 @@ type requestBody struct {
 	MaxCompletionTokens int                    `json:"max_completion_tokens"`
 	Temperature         *float64               `json:"temperature"`
 	Stop                []string               `json:"stop"`
-	ReasoningEffort     string                 `json:"reasoning_effort"`
+	ReasoningEffort     openai.ReasoningEffort `json:"reasoning_effort"`
+	Thinking            *requestThinking       `json:"thinking"`
 	ResponseFormat      *requestResponseFormat `json:"response_format"`
 	Stream              bool                   `json:"stream"`
 	StreamOptions       *requestStreamOptions  `json:"stream_options"`
+}
+
+type requestThinking struct {
+	Type openai.ThinkingMode `json:"type"`
 }
 
 type requestStreamOptions struct {
@@ -634,11 +1082,12 @@ type requestResponseFormat struct {
 }
 
 type requestMessage struct {
-	Role       string            `json:"role"`
-	Content    string            `json:"content"`
-	Name       string            `json:"name"`
-	ToolCallID string            `json:"tool_call_id"`
-	ToolCalls  []requestToolCall `json:"tool_calls"`
+	Role             string            `json:"role"`
+	Content          string            `json:"content"`
+	ReasoningContent string            `json:"reasoning_content"`
+	Name             string            `json:"name"`
+	ToolCallID       string            `json:"tool_call_id"`
+	ToolCalls        []requestToolCall `json:"tool_calls"`
 }
 
 type requestTool struct {

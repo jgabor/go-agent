@@ -120,7 +120,7 @@ func TestUsageSurfaceIsClosedAndTyped(t *testing.T) {
 			t.Fatalf("Usage field %q is an arbitrary extension surface", field.Name)
 		}
 	}
-	for _, want := range []string{"InputTokens", "OutputTokens", "TotalTokens", "CachedInputTokens", "CacheWriteTokens", "RequestID", "Provider", "Model"} {
+	for _, want := range []string{"InputTokens", "OutputTokens", "TotalTokens", "CachedInputTokens", "CacheWriteTokens", "ReasoningTokens", "RequestID", "Provider", "Model"} {
 		if !got[want] {
 			t.Fatalf("Usage missing %q", want)
 		}

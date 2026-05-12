@@ -1,4 +1,254 @@
 cycles:
+  - number: 68
+    timestamp: "2026-05-12"
+    type: process
+    phase: audit
+    what: Completed PLAN Task 6 (Plan-level freshness checkpoint) after verifying Tasks 1-5 evidence, public/docs/state freshness, hidden-reasoning non-exposure, TODO backlog state, and repository gates.
+    commit: "Uncommitted per user instruction"
+    inspiration: The plan needed a final audit checkpoint proving hidden reasoning replay is delivered as replay-only provider state and that docs, TODO, CHANGELOG, README, AGENTS, plan, and progress agree before closure.
+    discovered: Tasks 1-5 are substantiated by progress cycles 63-67; TODO has no open Now item for reasoning replay and still keeps unrelated deferred provider/policy work; public surfaces preserve the no registry, credential discovery, pricing/cost, CLI/TUI, workflow DSL, Aila product behavior, arbitrary map, and unbounded diagnostic boundaries.
+    verified: >-
+      Task 6 acceptance passed. Agentera `plan` reported Tasks 1-5 complete and
+      Task 6 pending before this checkpoint; progress cycles 63-67 contain
+      acceptance evidence and verification for Tasks 1-5. README, CHANGELOG,
+      TODO, AGENTS, docs/chat-completions-streaming-fidelity-contract.md, and
+      docs/streaming-primary-event-grammar.md agree that OpenAI-compatible
+      hidden reasoning is replay-only state attached to the assistant message,
+      default JSON/events/text/diagnostics omit raw hidden reasoning, thinking
+      controls are typed provider-package options, and `Usage.ReasoningTokens` is
+      typed token accounting without pricing or cost semantics. Source sampling
+      confirmed `Message.HiddenReasoning` uses `json:"-"`, provider replay emits
+      `reasoning_content` only from retained assistant tool-call messages, and
+      provider diagnostics redact hidden-reasoning patterns. Verification passed:
+      `go test ./providers/openai -run
+      'Test(DecodeChatCompletionResponsePreservesHiddenReasoningForReplay|ChatModel(ReplaysHiddenReasoningOnlyOnAssistantToolCallMessage|DoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage|AssemblesStreamingHiddenReasoningWithoutTextLeakage|DeepSeekStyleFixture(RejectsMissingReasoningReplay|ContinuesWithPreservedReasoning)|ReasoningReplay(PreservesEachToolSubturn|SurvivesLaterUserTurn)|ToolContinuationWithoutHiddenReasoningRemainsCompatible|RejectsInvalidThinkingOptionsBeforeProviderRequest|SendsDisabledThinkingControl))'`
+      exited 0; `go test ./...` exited 0; `mage check` exited 0 with package
+      tests passing, golangci-lint "0 issues.", and govulncheck "No
+      vulnerabilities found." `.agentera/vision.yaml` was not edited.
+    next: Plan complete; remaining unrelated follow-ups stay in TODO Later.
+    context:
+      intent: Execute only Task 6 from Preserve OpenAI-Compatible Reasoning Replay via inspektera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, source/doc edits, vision.yaml edits, provider registry, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, Aila product behavior, arbitrary request pass-through maps, or unbounded diagnostics.
+      scope: Final checkpoint over current repository state, plan/progress artifacts, focused tests, and full local gate.
+  - number: 67
+    timestamp: "2026-05-12"
+    type: docs
+    phase: build
+    what: Completed PLAN Task 5 (Refresh public docs and project status) by aligning README, provider contract docs, event grammar, AGENTS, TODO, CHANGELOG, plan state, and this progress evidence with OpenAI-compatible hidden reasoning replay, typed thinking controls, and typed reasoning-token accounting.
+    commit: "Uncommitted per user instruction"
+    inspiration: Public docs need to explain provider-required reasoning replay as hidden replay state for tool-call continuations without turning it into visible assistant text, product behavior, arbitrary request maps, pricing, or provider registry promises.
+    discovered: README and provider contract docs did not yet describe replay-only hidden reasoning, typed thinking controls, or typed reasoning-token usage; TODO still listed the reasoning replay work as open.
+    verified: >-
+      Acceptance 1 is backed by README Providers & Models and
+      docs/chat-completions-streaming-fidelity-contract.md Hidden Reasoning Replay:
+      OpenAI-compatible `reasoning_content` is documented as
+      `Message.HiddenReasoning` replay state attached to the original assistant
+      message, including assistant tool-call continuations, while default JSON,
+      EventTextDelta, RunResult.Text, and diagnostics remain free of raw hidden
+      reasoning. Acceptance 2 is backed by README Streaming Events and the
+      provider contract documenting tool-call continuation replay and the narrow
+      typed `providers/openai.ChatOptions` surface: enabled/disabled thinking and
+      low/medium/high reasoning effort, with invalid values rejected before
+      provider requests and no arbitrary pass-through map. Acceptance 3 is backed
+      by README Features & Roadmap, TODO Done, CHANGELOG Documentation, AGENTS
+      Current Reality, and `.agentera/plan.yaml` Task 5 status now reflecting
+      reasoning replay and typed thinking controls. Acceptance 4 is backed by
+      README Streaming Events, `api.go` Usage fields, the provider contract usage
+      table, and docs/streaming-primary-event-grammar.md Usage Facts documenting
+      `Usage.ReasoningTokens` as a closed typed token count with no pricing,
+      cost, currency, marketplace, or budget semantics. Acceptance 5 is backed by
+      the edited docs preserving exclusions for Aila-specific product behavior,
+      provider registry/selection, credential discovery, pricing, CLI/TUI,
+      workflow DSL, and arbitrary pass-through maps. Verification commands: first
+      `npx prettier --check README.md AGENTS.md CHANGELOG.md TODO.md
+      docs/chat-completions-streaming-fidelity-contract.md
+      docs/streaming-primary-event-grammar.md` reported formatting drift in the
+      two docs files; `npx prettier --write README.md AGENTS.md CHANGELOG.md
+      TODO.md docs/chat-completions-streaming-fidelity-contract.md
+      docs/streaming-primary-event-grammar.md` formatted them; rerunning the same
+      `npx prettier --check ...` exited 0; `go test ./...` exited 0; `mage check`
+      exited 0 with package tests passing, golangci-lint "0 issues.", and
+      govulncheck "No vulnerabilities found.". Retry evidence after Inspektera
+      failure: docs/streaming-primary-event-grammar.md Usage Facts now includes
+      `ReasoningTokens` in the closed Usage field table, matching `api.go`
+      lines 290-300 and preserving the no-pricing/cost boundary. Retry
+      verification: `npx prettier --check
+      docs/streaming-primary-event-grammar.md .agentera/progress.yaml` failed on
+      pre-existing historical YAML syntax outside cycle 67; `go test ./...`
+      exited 0; `npx prettier --check docs/streaming-primary-event-grammar.md`
+      exited 0; `uv run "$HOME/.agents/agentera/scripts/agentera" progress`
+      exited 0; `uv run "$HOME/.agents/agentera/scripts/agentera" plan` exited
+      0 and reported Task 5 completed, Task 6 pending; `mage check` exited 0
+      with package tests passing, golangci-lint "0 issues.", and govulncheck
+      "No vulnerabilities found.".
+    next: PLAN Task 6 Plan-level freshness checkpoint remains pending and was not executed.
+    context:
+      intent: Execute only Task 5 from Preserve OpenAI-Compatible Reasoning Replay via dokumentera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, vision.yaml edits, Task 6 checkpoint, Aila product behavior, provider registry, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, arbitrary request pass-through maps, or unbounded diagnostics.
+      scope: Public README/provider docs, project status artifacts, plan Task 5 status, and this progress entry.
+  - number: 66
+    timestamp: "2026-05-12"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 4 (Add bounded thinking controls and typed accounting) with typed OpenAI-compatible thinking controls, finite reasoning effort validation, and typed reasoning-token usage accounting.
+    commit: "Uncommitted per user instruction"
+    inspiration: OpenAI-compatible thinking providers need narrow provider-package controls and accounting without arbitrary request maps, cost ownership, aliases, credential discovery, or product behavior in go-agent core.
+    discovered: Existing `ReasoningEffort` was a raw string and usage accounting lacked provider-supplied `reasoning_tokens`; the replay defaults already remained independent from thinking controls.
+    verified: >-
+      Acceptance 1 is backed by TestChatModelSendsChatCompletionRequest and
+      TestChatModelSendsDisabledThinkingControl: ChatOptions.Thinking is a typed
+      finite provider-package value that serializes as the bounded
+      OpenAI-compatible `thinking.type` request control for enabled and disabled
+      modes, with no arbitrary request map. Acceptance 2 is backed by
+      ChatOptions.ReasoningEffort using the typed ReasoningEffort finite value set
+      and TestChatOptionsSurfaceIsTyped preserving map-free provider options.
+      Acceptance 3 is backed by
+      TestChatModelRejectsInvalidThinkingOptionsBeforeProviderRequest, which
+      deterministically rejects invalid thinking and effort values before any
+      HTTP request. Acceptance 4 is backed by usage parsing tests that expose
+      provider `completion_tokens_details.reasoning_tokens` as typed
+      Usage.ReasoningTokens while absent counts remain zero and no cost/pricing
+      fields exist. Acceptance 5 is backed by the existing default-control replay
+      fixtures continuing to pass, including
+      TestChatModelDeepSeekStyleFixtureContinuesWithPreservedReasoning.
+      Acceptance 6 is backed by the diff scope and TestUsageSurfaceIsClosedAndTyped:
+      no pricing, account, credential, provider-alias, CLI/TUI, workflow DSL,
+      Aila product, arbitrary request-map, or unbounded diagnostic behavior was
+      introduced. Verification passed with `gofmt -w "api.go"
+      "model_adapter.go" "api_test.go" "providers/openai/openai.go"
+      "providers/openai/openai_test.go" && go test ./providers/openai`, `go test
+      ./...`, and `mage check` (all package tests passed, golangci-lint reported
+      "0 issues.", and govulncheck reported "No vulnerabilities found.").
+    next: PLAN Task 5 Refresh public docs and project status remains pending.
+    context:
+      intent: Execute only Task 4 from Preserve OpenAI-Compatible Reasoning Replay via realisera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, vision.yaml edits, provider registries, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, Aila product behavior, arbitrary request pass-through maps, unbounded diagnostics, or scope creep into Tasks 5-6.
+      scope: OpenAI-compatible ChatOptions thinking/effort controls, typed Usage.ReasoningTokens accounting, focused validation/request/usage tests, plan task status, and this progress entry.
+  - number: 65
+    timestamp: "2026-05-12"
+    type: test
+    phase: build
+    what: Completed PLAN Task 3 (Prove required-reasoning tool-call replay) with DeepSeek-style missing-reasoning rejection, successful preserved-reasoning continuation, multi-subturn retention, later-user-turn session replay, and no-hidden-reasoning compatibility coverage.
+    commit: "Uncommitted per user instruction"
+    inspiration: DeepSeek-compatible thinking providers reject tool-call continuation when prior assistant tool-call messages omit provider-hidden `reasoning_content`; go-agent must prove retained hidden reasoning is replayed without exposing it as normal assistant text.
+    discovered: Existing replay mechanics already attached hidden reasoning narrowly to assistant tool-call messages; Task 3 needed runner/provider boundary fixtures proving provider-required continuation behavior across actual tool execution and retained sessions.
+    verified: >-
+      Acceptance 1 is backed by
+      TestChatModelDeepSeekStyleFixtureContinuesWithPreservedReasoning: an
+      OpenAI-compatible provider fixture returns a hidden-reasoning assistant tool
+      call, the runner executes the tool, and the next provider request includes
+      the same `reasoning_content` on the corresponding assistant tool-call
+      message. Acceptance 2 is backed by
+      TestChatModelDeepSeekStyleFixtureRejectsMissingReasoningReplay: a
+      DeepSeek-style fixture returns HTTP 400 with `missing_reasoning` when a
+      tool-result continuation omits hidden reasoning on the retained assistant
+      tool-call message. Acceptance 3 is backed by the preserved-reasoning
+      fixture succeeding and returning final text instead of the missing-reasoning
+      400. Acceptance 4 is backed by
+      TestChatModelReasoningReplayPreservesEachToolSubturn: two consecutive
+      assistant tool-call subturns carry distinct hidden reasoning values, and a
+      later provider request retains each value on its own assistant tool-call
+      message. Acceptance 5 is backed by
+      TestChatModelReasoningReplaySurvivesLaterUserTurn: after a completed
+      tool-call interaction is saved in MemorySessionStore, a later user turn
+      still replays the retained assistant tool-call message with its required
+      hidden reasoning. No-hidden-reasoning compatibility is backed by
+      TestChatModelToolContinuationWithoutHiddenReasoningRemainsCompatible,
+      which proves continuations without hidden reasoning still send no
+      `reasoning_content` and complete normally. Focused verification passed
+      with `gofmt -w "providers/openai/openai_test.go" && go test
+      ./providers/openai`. Full repository gate passed with `mage check`:
+      package tests passed for go-agent, examples/cli, examples/service,
+      examples/worker, and providers/openai; examples/minimal had no test files;
+      golangci-lint reported "0 issues."; govulncheck reported "No
+      vulnerabilities found."
+    next: PLAN Task 4 Add bounded thinking controls and typed accounting remains pending.
+    context:
+      intent: Execute only Task 3 from Preserve OpenAI-Compatible Reasoning Replay via realisera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, vision.yaml edits, provider registries, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, Aila product behavior, arbitrary request pass-through maps, unbounded diagnostics, or scope creep into Tasks 4-6.
+      scope: OpenAI-compatible required-reasoning replay proof tests, plan task status, and this progress entry.
+  - number: 64
+    timestamp: "2026-05-12"
+    type: test
+    phase: build
+    what: Completed PLAN Task 2 (Preserve hidden reasoning across response shapes) by locking whole-message and multi-chunk streamed hidden reasoning assembly without visible text leakage.
+    commit: "Uncommitted per user instruction"
+    inspiration: OpenAI-compatible thinking providers can return hidden reasoning in final assistant shapes or streamed deltas; go-agent must preserve it only for replay while keeping normal text projections clean.
+    discovered: The current narrow replay implementation already preserved streamed `reasoning_content`; Task 2 needed explicit regression coverage for whole-message preservation, ordered streaming concatenation, mixed visible/hidden turns, request replay, and absent-reasoning compatibility.
+    verified: >-
+      Acceptance 1 is backed by
+      TestDecodeChatCompletionResponsePreservesHiddenReasoningForReplay: an
+      OpenAI-compatible whole-message Chat Completions fixture with
+      `reasoning_content`, visible `content`, and a tool call decodes into
+      Message.HiddenReasoning for replay while visible content remains normal
+      text. Acceptance 2 is backed by
+      TestChatModelAssemblesStreamingHiddenReasoningWithoutTextLeakage: multiple
+      streamed `reasoning_content` deltas concatenate in order into
+      HiddenReasoning without text events. Acceptance 3 is backed by both
+      whole-message and streaming tests asserting RunResult.Text, Message.Content,
+      and EventTextDelta contain only visible assistant content, plus
+      MarshalEvents/JSON checks that hidden reasoning is not routine serialized
+      output. Acceptance 4 is backed by
+      TestDecodeChatCompletionResponsePreservesHiddenReasoningForReplay and
+      TestChatModelReplaysHiddenReasoningOnlyOnAssistantToolCallMessage: decoded
+      or retained assistant tool-call messages prepare OpenAI-compatible request
+      messages with provider-native `reasoning_content`. Acceptance 5 is backed
+      by TestChatModelDoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage
+      and existing provider/runtime tests: absent hidden reasoning leaves request
+      messages empty and normal text, tool-call, usage, and stop behavior intact.
+      Diagnostic safety retry coverage is backed by
+      TestChatModelRedactsProviderErrorExcerpts, which now proves
+      `reasoning_content` and hidden-reasoning excerpt values are redacted.
+      Focused verification passed with `gofmt -w "providers/openai/openai.go"
+      "providers/openai/openai_test.go" "providers/openai/whole_message_test.go"
+      "stream_assembly_test.go" && go test ./providers/openai -run
+      'Test(DecodeChatCompletionResponsePreservesHiddenReasoningForReplay|ChatModel(ReplaysHiddenReasoningOnlyOnAssistantToolCallMessage|DoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage|AssemblesStreamingHiddenReasoningWithoutTextLeakage|RedactsProviderErrorExcerpts))'`.
+      Focused cross-package verification passed with `go test ./... -run
+      'Test(StreamTurnResultPreservesWholeMessageHiddenReasoningWithoutTextLeakage|DecodeChatCompletionResponsePreservesHiddenReasoningForReplay|ChatModel(ReplaysHiddenReasoningOnlyOnAssistantToolCallMessage|DoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage|AssemblesStreamingHiddenReasoningWithoutTextLeakage|RedactsProviderErrorExcerpts))'`.
+      Full repository gate passed with `mage check`: package tests passed for
+      go-agent, examples/cli, examples/service, examples/worker, and
+      providers/openai; examples/minimal had no test files; golangci-lint
+      reported "0 issues."; govulncheck reported "No vulnerabilities found."
+    next: PLAN Task 3 Prove required-reasoning tool-call replay remains pending.
+    context:
+      intent: Execute only Task 2 from Preserve OpenAI-Compatible Reasoning Replay via realisera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, vision.yaml edits, provider registries, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, Aila product behavior, arbitrary request pass-through maps, unbounded diagnostics, or scope creep into Tasks 3-6.
+      scope: OpenAI-compatible hidden reasoning response-shape regression tests, whole-message stream adapter coverage, plan task status, and this progress entry.
+  - number: 63
+    timestamp: "2026-05-12"
+    type: feature
+    phase: build
+    what: Completed PLAN Task 1 (Lock hidden reasoning replay contract) by adding replay-only hidden reasoning state on assistant messages and OpenAI-compatible `reasoning_content` attachment for assistant tool-call messages.
+    commit: "Uncommitted per user instruction"
+    inspiration: DeepSeek-style thinking providers require prior hidden reasoning to be replayed with the assistant tool-call message, while go-agent must not expose it as normal assistant text or diagnostics.
+    discovered: The narrowest runtime surface that supports runner/session replay is a documented `Message.HiddenReasoning` field with default JSON omission; provider request preparation attaches it only when the original assistant message with tool calls is retained.
+    verified: >-
+      Acceptance 1 and 2 are backed by the `Message.HiddenReasoning` contract in
+      api.go, which documents provider-hidden reasoning as replay-only state
+      paired with the original assistant tool-call message and omitted from
+      default JSON serialization, not normal assistant text. Acceptance 3 is
+      backed by TestChatModelReplaysHiddenReasoningOnlyOnAssistantToolCallMessage:
+      retained assistant tool-call history sends `reasoning_content` on that
+      same assistant message, keeps assembled Text/Content empty, preserves the
+      bounded fixture only in HiddenReasoning, and confirms diagnostics plus
+      MarshalEvents output do not contain the fixture. Acceptance 4 is backed by
+      TestChatModelDoesNotReplayHiddenReasoningWithoutOriginalAssistantMessage:
+      when retained history contains the tool result but not the corresponding
+      assistant tool-call message, every prepared request message has empty
+      `reasoning_content`, and serialized events do not contain the absent
+      fixture. Acceptance 5 is backed by both positive and negative contract
+      tests plus assertDiagnosticsBounded, covering replay attachment, text
+      exclusion, diagnostics exclusion, and serialization exclusion with bounded
+      fixtures. Focused provider tests passed with `go test ./providers/openai`.
+      Full repository gate passed with `mage check`: package tests passed for
+      go-agent, examples/cli, examples/service, examples/worker, and
+      providers/openai; examples/minimal had no test files; golangci-lint
+      reported "0 issues."; govulncheck reported "No vulnerabilities found."
+    next: PLAN Task 2 Preserve hidden reasoning across response shapes remains pending.
+    context:
+      intent: Execute only Task 1 from Preserve OpenAI-Compatible Reasoning Replay via realisera under orkestrera dispatch.
+      constraints: No commits, staging, pushes, vision.yaml edits, provider registries, credential discovery, pricing/cost ownership, CLI/TUI behavior, workflow DSL, Aila product behavior, arbitrary request pass-through maps, or unbounded diagnostics.
+      scope: api replay contract, OpenAI Chat Completions reasoning replay attachment, focused contract tests, plan task status, and this progress entry.
   - number: 62
     timestamp: "2026-05-11"
     type: process

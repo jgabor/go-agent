@@ -208,12 +208,23 @@ Custom providers implement the same stream-first interface as built-in adapters.
 Optional `ModelCapabilitiesOf` reads static hints for the selected model when a
 `Model` implements `ModelCapabilitiesProvider` (the OpenAI-compatible adapter
 fills documented limits and flags only for IDs in its curated model facts table
-in `providers/openai`; otherwise numeric fields stay zero and lists stay empty). Pricing, availability,
-aliases, and display names remain host-owned. Adapters that omit
-`ModelCapabilitiesProvider` remain valid. Tests, fakes,
-and local models that only have a final response can use `ModelFromSimple` to
-convert that response into canonical events without writing a provider-style
-streamer. go-agent does not need a model marketplace to call a model.
+in `providers/openai`; otherwise numeric fields stay zero and lists stay empty).
+Pricing, availability, aliases, and display names remain host-owned. Adapters
+that omit `ModelCapabilitiesProvider` remain valid. Tests, fakes, and local
+models that only have a final response can use `ModelFromSimple` to convert that
+response into canonical events without writing a provider-style streamer.
+go-agent does not need a model marketplace to call a model.
+
+OpenAI-compatible thinking providers can return hidden assistant reasoning in
+whole-message responses or streamed `reasoning_content` deltas. The adapter
+preserves that value only as `Message.HiddenReasoning` replay state on the
+assistant message that produced it, including assistant tool-call messages that
+must be sent back with later tool results. Hidden reasoning is not normal
+assistant text, is omitted from default JSON/event serialization, and is redacted
+from bounded provider diagnostics by default. `providers/openai.ChatOptions`
+keeps thinking controls typed and narrow: `ThinkingEnabled`, `ThinkingDisabled`,
+and `ReasoningEffortLow/Medium/High` are validated before any provider request,
+with no arbitrary request pass-through map.
 
 ## Tools
 
@@ -347,6 +358,13 @@ Events are meant for logs, traces, metrics, UIs, tests, and replay. If an agent
 did something surprising, the host application should be able to reconstruct the
 run without reading tea leaves from a final string.
 
+Tool-call loops replay provider-required hidden reasoning only with the retained
+assistant tool-call message it belongs to. If that original assistant message is
+not in retained history, go-agent does not replay hidden reasoning separately.
+Usage events expose typed counts such as `Usage.ReasoningTokens` when providers
+report them; the runtime does not attach pricing, cost, currency, marketplace, or
+budget semantics to usage.
+
 ## Observability
 
 go-agent is observable by default. A production agent runtime should make these
@@ -463,7 +481,7 @@ This table reflects the repository today.
 | Tool schemas            | Functions, metadata, rich results, streaming progress           | Started        | `ToolResult` validation; optional `StreamingTool` / `EventToolProgress`                                     |
 | Streaming               | Structured events, assembly, and JSON-safe replay               | Started        | `Stream`, `AssembleEvents`, `MarshalEvents`/`UnmarshalEvents`, optional run lineage on `RunRequest`/`Event` |
 | Sessions                | Pluggable session storage                                       | Started        | SessionStore and memory store exist                                                                         |
-| Providers               | OpenAI Chat Completions (SSE) + optional capability hints       | Started        | `providers/openai` only; unknown models get zero/empty capability hints                                     |
+| Providers               | OpenAI Chat Completions (SSE), reasoning replay, typed options  | Started        | `providers/openai` only; hidden reasoning replay, typed thinking controls, typed reasoning-token usage      |
 | More provider adapters  | Anthropic, Realtime, plan/device-code APIs, other stacks        | Deferred       | Not in core (GA-AILA-006); roadmap “Started” applies only to the in-tree OpenAI-compatible adapter          |
 | Observability           | Event sink and OpenTelemetry integration                        | Started        | EventSink hooks observe runtime events                                                                      |
 | Policy hooks            | Pending/decision events, cancel vs deny, recoverable denial     | Started        | `EventPolicyPending`, cancel/duration vs `StopPolicyDenied`, `PolicyDecision.ToolResult`                    |

@@ -17,16 +17,17 @@ completion results from those events.
 
 Included behavior:
 
-| Area           | Contract                                                                                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API family     | OpenAI-compatible Chat Completions only.                                                                                                                                    |
-| Transport      | HTTP response body containing Server-Sent Events with `data:` records and terminal `data: [DONE]`.                                                                          |
-| Choices        | One active assistant choice per request. The adapter may reject multiple simultaneous choices instead of merging them.                                                      |
-| Text           | Incremental `delta.content` chunks become canonical text block deltas.                                                                                                      |
-| Tool calls     | Incremental `delta.tool_calls` chunks are accumulated by provider `index` and normalized to stable `ToolCallID` values.                                                     |
-| Usage          | Provider-supplied usage chunks become `EventUsage`; absence of usage is valid.                                                                                              |
-| Finish reasons | Raw provider finish reasons are diagnostics only; canonical behavior is expressed through final message/tool readiness, usage, terminal error, and stop events.             |
-| Diagnostics    | Only bounded, non-secret provider facts are carried: provider/package identity, request ID, HTTP status, provider error type/code, raw stop reason, and sanitized excerpts. |
+| Area             | Contract                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API family       | OpenAI-compatible Chat Completions only.                                                                                                                                    |
+| Transport        | HTTP response body containing Server-Sent Events with `data:` records and terminal `data: [DONE]`.                                                                          |
+| Choices          | One active assistant choice per request. The adapter may reject multiple simultaneous choices instead of merging them.                                                      |
+| Text             | Incremental `delta.content` chunks become canonical text block deltas.                                                                                                      |
+| Tool calls       | Incremental `delta.tool_calls` chunks are accumulated by provider `index` and normalized to stable `ToolCallID` values.                                                     |
+| Hidden reasoning | Whole-message and streamed `reasoning_content` becomes replay-only `Message.HiddenReasoning`, never visible assistant text.                                                 |
+| Usage            | Provider-supplied usage chunks become `EventUsage`; absence of usage is valid.                                                                                              |
+| Finish reasons   | Raw provider finish reasons are diagnostics only; canonical behavior is expressed through final message/tool readiness, usage, terminal error, and stop events.             |
+| Diagnostics      | Only bounded, non-secret provider facts are carried: provider/package identity, request ID, HTTP status, provider error type/code, raw stop reason, and sanitized excerpts. |
 
 Excluded behavior:
 
@@ -55,17 +56,18 @@ data: [DONE]
 
 Supported records:
 
-| SSE record                                          | Required handling                                                                                                                                                                             |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Blank lines and comments                            | Ignore without emitting canonical events.                                                                                                                                                     |
-| `data: [DONE]`                                      | End the provider stream after all prior finalization has completed.                                                                                                                           |
-| JSON chunk with `choices[0].delta.role="assistant"` | Accept as stream-start evidence; do not emit provider-specific role events.                                                                                                                   |
-| JSON chunk with `choices[0].delta.content`          | Start a text block if needed, then emit `EventTextDelta` with literal text. Empty strings are no-ops unless needed for diagnostics.                                                           |
-| JSON chunk with `choices[0].delta.tool_calls[]`     | Start or reuse a tool-call block by provider `index`; preserve supplied `id`, generate one if absent, append `function.name` and `function.arguments` fragments through `EventToolCallDelta`. |
-| JSON chunk with `choices[0].finish_reason`          | Finalize open blocks and the assistant message according to the raw reason; retain the raw reason only as bounded diagnostics.                                                                |
-| JSON chunk with empty `choices` and `usage`         | Emit usage only; this covers `stream_options.include_usage` style final usage chunks.                                                                                                         |
-| JSON chunk with both `finish_reason` and `usage`    | Finalize the assistant turn and emit usage before any terminal stop.                                                                                                                          |
-| Malformed JSON or contradictory chunks              | Emit an accepted-stream terminal error and terminal stop when the stream had been accepted; return the same Go error.                                                                         |
+| SSE record                                           | Required handling                                                                                                                                                                             |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blank lines and comments                             | Ignore without emitting canonical events.                                                                                                                                                     |
+| `data: [DONE]`                                       | End the provider stream after all prior finalization has completed.                                                                                                                           |
+| JSON chunk with `choices[0].delta.role="assistant"`  | Accept as stream-start evidence; do not emit provider-specific role events.                                                                                                                   |
+| JSON chunk with `choices[0].delta.content`           | Start a text block if needed, then emit `EventTextDelta` with literal text. Empty strings are no-ops unless needed for diagnostics.                                                           |
+| JSON chunk with `choices[0].delta.reasoning_content` | Append hidden reasoning to the assistant message replay state in stream order without emitting text deltas.                                                                                   |
+| JSON chunk with `choices[0].delta.tool_calls[]`      | Start or reuse a tool-call block by provider `index`; preserve supplied `id`, generate one if absent, append `function.name` and `function.arguments` fragments through `EventToolCallDelta`. |
+| JSON chunk with `choices[0].finish_reason`           | Finalize open blocks and the assistant message according to the raw reason; retain the raw reason only as bounded diagnostics.                                                                |
+| JSON chunk with empty `choices` and `usage`          | Emit usage only; this covers `stream_options.include_usage` style final usage chunks.                                                                                                         |
+| JSON chunk with both `finish_reason` and `usage`     | Finalize the assistant turn and emit usage before any terminal stop.                                                                                                                          |
+| Malformed JSON or contradictory chunks               | Emit an accepted-stream terminal error and terminal stop when the stream had been accepted; return the same Go error.                                                                         |
 
 Supported tool-call delta fields:
 
@@ -95,7 +97,8 @@ public event fields. They normalize into existing canonical events:
 | Additional tool-call delta for an index  | Additional `EventToolCallDelta` on the same tool-call block.                                                                   |
 | Finish after text                        | `EventContentBlockEnd` for the text block, then `EventMessageFinal`.                                                           |
 | Finish after tool calls                  | `EventContentBlockEnd` for every tool-call block, then `EventMessageFinal`, then one `EventToolCallReady` per finalized call.  |
-| Usage supplied                           | `EventUsage` with generic token/cache/request metadata.                                                                        |
+| Hidden reasoning supplied                | `EventMessageFinal.Message.HiddenReasoning` on the corresponding assistant message, omitted from default JSON serialization.   |
+| Usage supplied                           | `EventUsage` with typed token/cache/request/provider/model facts.                                                              |
 | Accepted provider stream failure         | `EventError` with the provider error, optional `EventUsage` if supplied, then `EventStop` with a non-success stop reason.      |
 
 Successful completed assistant-turn streams emit a canonical `EventStop` with
@@ -128,18 +131,39 @@ No event may follow `EventStop`. After terminal `EventError`, only optional
 
 Usage is descriptive provider metadata, not policy enforcement.
 
-| Provider usage field               | Canonical field                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `prompt_tokens`                    | `Usage.InputTokens`                                                                                                |
-| `completion_tokens`                | `Usage.OutputTokens`                                                                                               |
-| `total_tokens`                     | `Usage.TotalTokens` when supplied; derive only when the provider omits it and both components are present.         |
-| cache details                      | `Usage.CachedInputTokens` or `Usage.CacheWriteTokens` when the provider reports compatible non-secret token facts. |
-| request/model/provider identifiers | `Usage.RequestID`, `Usage.Provider`, and `Usage.Model`.                                                            |
+| Provider usage field                         | Canonical field                                                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `prompt_tokens`                              | `Usage.InputTokens`                                                                                                |
+| `completion_tokens`                          | `Usage.OutputTokens`                                                                                               |
+| `total_tokens`                               | `Usage.TotalTokens` when supplied; derive only when the provider omits it and both components are present.         |
+| `completion_tokens_details.reasoning_tokens` | `Usage.ReasoningTokens` when supplied; zero means absent or zero.                                                  |
+| cache details                                | `Usage.CachedInputTokens` or `Usage.CacheWriteTokens` when the provider reports compatible non-secret token facts. |
+| request/model/provider identifiers           | `Usage.RequestID`, `Usage.Provider`, and `Usage.Model`.                                                            |
 
 Absence of usage is valid. The adapter must not synthesize token counts from
 text length, must not synthesize cost, and must not encode pricing, budgets,
 currency, marketplace metadata, arbitrary usage metadata maps, or Lira cost
 policy.
+
+## Hidden Reasoning Replay
+
+Hidden reasoning is provider replay state paired with the assistant message that
+produced it. For OpenAI-compatible thinking APIs, whole-message
+`reasoning_content` and streamed reasoning deltas are preserved as
+`Message.HiddenReasoning` so a later tool-result continuation can replay the
+provider-native field on the same assistant tool-call message.
+
+Hidden reasoning must not be treated as user-facing assistant text. It must not
+emit `EventTextDelta`, modify `RunResult.Text`, appear in default event JSON, or
+be replayed independently from the original assistant message. If retained
+history omits the assistant tool-call message, the adapter does not send orphaned
+reasoning with later tool results.
+
+The OpenAI-compatible adapter also keeps thinking controls narrow and typed:
+`ChatOptions.Thinking` accepts only enabled or disabled, and
+`ChatOptions.ReasoningEffort` accepts only low, medium, or high. Invalid values
+fail before request construction. These controls do not replace replay; required
+reasoning replay works with default controls.
 
 ## Diagnostics Boundary
 
@@ -163,6 +187,7 @@ Forbidden diagnostics:
 | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | API keys, bearer tokens, auth headers, credential file paths, or auth cache contents                                                                    | Secret material and host auth ownership.                      |
 | Full prompts, messages, tool arguments, or tool results                                                                                                 | Transcript/tool payloads are not diagnostics.                 |
+| Raw hidden reasoning or provider `reasoning_content`                                                                                                    | Replay-only state, not diagnostics or user-facing text.       |
 | Environment values, credential-bearing URLs, or raw request bodies                                                                                      | Secret and host config leakage risk.                          |
 | Provider registry, selected-provider policy, settings, prompt/resource loading, workdir, pricing, budgets, marketplace metadata, or Lira workflow facts | Product policy and configuration are outside `go-agent` core. |
 
@@ -176,11 +201,12 @@ canonical events rather than provider chunks.
 
 The narrow fields added for this contract are:
 
-| Gap                    | Narrow need                                                                                                                                                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Request options        | `TurnRequest.Options` carries provider-neutral max output tokens, temperature, and stop sequences. OpenAI-specific reasoning effort, response format, and stream usage inclusion live in typed `providers/openai.ChatOptions`. |
-| General diagnostics    | `Event.Diagnostics` carries bounded request ID, HTTP status, provider error type/code, raw stop reason, and redacted excerpts without arbitrary maps.                                                                          |
-| Provider error details | `ProviderError` carries typed diagnostics for provider status/code/request correlation.                                                                                                                                        |
+| Gap                    | Narrow need                                                                                                                                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request options        | `TurnRequest.Options` carries provider-neutral max output tokens, temperature, and stop sequences. OpenAI-specific thinking mode, reasoning effort, response format, and stream usage inclusion live in typed `providers/openai.ChatOptions`. |
+| Replay-only reasoning  | `Message.HiddenReasoning` carries OpenAI-compatible hidden reasoning only with the assistant message that produced it and is omitted from default JSON serialization.                                                                         |
+| General diagnostics    | `Event.Diagnostics` carries bounded request ID, HTTP status, provider error type/code, raw stop reason, and redacted excerpts without arbitrary maps.                                                                                         |
+| Provider error details | `ProviderError` carries typed diagnostics for provider status/code/request correlation.                                                                                                                                                       |
 
 No registry, auth discovery, settings loader, pricing/cost policy, workdir,
 Responses API, Anthropic adapter, Copilot exchange, Zen routing, MCP,

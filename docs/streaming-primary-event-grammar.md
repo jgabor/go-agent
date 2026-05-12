@@ -91,7 +91,7 @@ not include arbitrary maps or opaque provider/host metadata.
 | `message_final`       | Complete assistant `Message`                                                               | The assistant message assembled for the turn. It must match prior block starts, deltas, and ends.                                                                                               |
 | `tool_call_ready`     | Complete `ToolCall`                                                                        | A finalized tool call is ready for policy/execution. Emitted after its tool-call block is complete and before the tool executes.                                                                |
 | `tool_result`         | Complete `ToolResult` and tool-result `Message` or block                                   | A tool execution result is appended to the transcript.                                                                                                                                          |
-| `usage`               | `Usage`                                                                                    | Typed token/cache/request/provider/model facts for a completed or terminal provider interaction.                                                                                                |
+| `usage`               | `Usage`                                                                                    | Typed token/cache/request/provider/model facts for a completed or terminal provider interaction, including reasoning-token counts when reported.                                                |
 | `stop`                | `StopReason`                                                                               | Terminal accepted-run stop state. Exactly one terminal stop is emitted for an accepted run.                                                                                                     |
 | `error`               | `Error` and terminal classification                                                        | Terminal accepted-run error state, or non-terminal diagnostic only when explicitly marked non-terminal by a future extension. In this plan, accepted stream failures use terminal error events. |
 
@@ -99,6 +99,11 @@ Policy and retry events from the current runtime remain runtime decision events,
 not provider stream grammar. Later implementation tasks may keep or reshape them,
 but they must reduce without contradicting the canonical response, tool, usage,
 stop, and error events above.
+
+`Message.HiddenReasoning` is replay-only provider state, not a user-facing block
+kind. Providers that require hidden reasoning replay keep it attached to the
+assistant message that produced it; reducers must not turn it into text blocks or
+tool-result content.
 
 ## Ordering Rules
 
@@ -176,6 +181,7 @@ Allowed fields:
 | `TotalTokens`       | Provider-reported total when available; reducers may derive only when safe. |
 | `CachedInputTokens` | Input tokens served from provider cache.                                    |
 | `CacheWriteTokens`  | Tokens written to provider cache.                                           |
+| `ReasoningTokens`   | Provider-reported reasoning token count; zero means absent or zero.         |
 | `RequestID`         | Non-secret provider request correlation ID.                                 |
 | `Provider`          | Optional provider/package identifier for diagnostics.                       |
 | `Model`             | Optional concrete model identifier reported by the provider.                |

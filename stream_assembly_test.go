@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	goagent "github.com/jgabor/go-agent"
@@ -64,6 +65,46 @@ func TestAssembleEventsReplayMatchesOrReportsDivergence(t *testing.T) {
 	_, err2 := goagent.AssembleEvents(contradictory)
 	if !goagent.IsStreamDivergence(err1) || err1.Error() != err2.Error() {
 		t.Fatalf("divergence not deterministic: err1=%v err2=%v", err1, err2)
+	}
+}
+
+func TestStreamTurnResultPreservesWholeMessageHiddenReasoningWithoutTextLeakage(t *testing.T) {
+	const hiddenReasoning = "bounded whole-message hidden reasoning"
+	call := goagent.ToolCall{ID: "call_weather", Name: "weather", Input: json.RawMessage(`{"city":"Austin"}`)}
+	var events []goagent.Event
+
+	goagent.StreamTurnResult(goagent.TurnResult{
+		Message: goagent.Message{
+			Content:         "Visible answer.",
+			HiddenReasoning: hiddenReasoning,
+			ToolCalls:       []goagent.ToolCall{call},
+		},
+	}, func(event goagent.Event) {
+		events = append(events, event)
+	})
+	events = append(events, goagent.Event{Kind: goagent.EventStop, StopReason: goagent.StopComplete})
+
+	assembled, err := goagent.AssembleEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.Text != "Visible answer." || len(assembled.Messages) != 1 || assembled.Messages[0].Content != "Visible answer." {
+		t.Fatalf("visible text assembly = %+v", assembled)
+	}
+	if assembled.Messages[0].HiddenReasoning != hiddenReasoning {
+		t.Fatalf("hidden reasoning = %q, want %q", assembled.Messages[0].HiddenReasoning, hiddenReasoning)
+	}
+	for _, event := range events {
+		if event.Kind == goagent.EventTextDelta && strings.Contains(event.Text, "hidden reasoning") {
+			t.Fatalf("hidden reasoning leaked into text event: %+v", event)
+		}
+	}
+	data, err := goagent.MarshalEvents(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), hiddenReasoning) || strings.Contains(assembled.Text, "hidden reasoning") {
+		t.Fatalf("hidden reasoning leaked into visible projections: text=%q events=%s", assembled.Text, data)
 	}
 }
 

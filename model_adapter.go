@@ -84,5 +84,5 @@ func finalTurnMessage(turn TurnResult) Message {
 }
 
 func (u Usage) empty() bool {
-	return u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 && u.CachedInputTokens == 0 && u.CacheWriteTokens == 0 && u.RequestID == "" && u.Provider == "" && u.Model == ""
+	return u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 && u.CachedInputTokens == 0 && u.CacheWriteTokens == 0 && u.ReasoningTokens == 0 && u.RequestID == "" && u.Provider == "" && u.Model == ""
 }

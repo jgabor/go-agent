@@ -36,6 +36,7 @@ var excerptRedactions = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)"?authorization"?\s*[:=]\s*"?bearer\s+[^\s,"'}]+`),
 	regexp.MustCompile(`(?i)"?api[_-]?key"?\s*[:=]\s*"?[^\s,"'}]+`),
 	regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^\s/@]+:[^\s/@]+@`),
+	regexp.MustCompile(`(?is)"?(reasoning_content|hidden[_ -]?reasoning)"?\s*[:=]\s*("[^"\\]*(?:\\.[^"\\]*)*"|'[^']*'|[^,;\n}]+)`),
 	regexp.MustCompile(`(?is)"?(prompt|messages|tool[_ -]?args?|arguments)"?\s*[:=]\s*(\[[^\]]*\]|\{[^}]*\}|"[^"]*"|'[^']*'|[^,;\n]+)`),
 	regexp.MustCompile(`(?i)"?(env|environment|[A-Z][A-Z0-9_]{2,})"?\s*=\s*"?[^\s,"'}]+`),
 }
@@ -51,11 +52,29 @@ type ChatModel struct {
 
 // ChatOptions carries bounded OpenAI-compatible Chat Completions options.
 type ChatOptions struct {
-	ReasoningEffort string
+	ReasoningEffort ReasoningEffort
+	Thinking        ThinkingMode
 	ResponseFormat  ResponseFormat
 	// IncludeStreamUsage requests stream_options.include_usage when the streaming adapter is used.
 	IncludeStreamUsage bool
 }
+
+// ReasoningEffort identifies supported OpenAI-compatible reasoning_effort values.
+type ReasoningEffort string
+
+const (
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
+
+// ThinkingMode identifies supported OpenAI-compatible thinking controls.
+type ThinkingMode string
+
+const (
+	ThinkingEnabled  ThinkingMode = "enabled"
+	ThinkingDisabled ThinkingMode = "disabled"
+)
 
 // ResponseFormat configures OpenAI-compatible response_format without using an untyped pass-through map.
 type ResponseFormat struct {
@@ -87,6 +106,9 @@ func (m ChatModel) Stream(ctx context.Context, request goagent.TurnRequest, emit
 	}
 	if m.APIKey == "" {
 		return fmt.Errorf("goagent/openai: API key is required")
+	}
+	if err := m.Options.validate(); err != nil {
+		return err
 	}
 
 	body := m.chatRequest(request, true)
@@ -151,6 +173,7 @@ func (m ChatModel) chatRequest(request goagent.TurnRequest, stream bool) chatReq
 		Temperature:         request.Options.Temperature,
 		Stop:                append([]string(nil), request.Options.StopSequences...),
 		ReasoningEffort:     m.Options.ReasoningEffort,
+		Thinking:            openAIThinking(m.Options.Thinking),
 		ResponseFormat:      openAIResponseFormat(m.Options.ResponseFormat),
 		Stream:              stream,
 	}
@@ -158,6 +181,24 @@ func (m ChatModel) chatRequest(request goagent.TurnRequest, stream bool) chatReq
 		body.StreamOptions = &chatStreamOptions{IncludeUsage: true}
 	}
 	return body
+}
+
+func (o ChatOptions) validate() error {
+	if o.ReasoningEffort != "" {
+		switch o.ReasoningEffort {
+		case ReasoningEffortLow, ReasoningEffortMedium, ReasoningEffortHigh:
+		default:
+			return fmt.Errorf("goagent/openai: unsupported reasoning effort %q (valid: low, medium, high)", o.ReasoningEffort)
+		}
+	}
+	if o.Thinking != "" {
+		switch o.Thinking {
+		case ThinkingEnabled, ThinkingDisabled:
+		default:
+			return fmt.Errorf("goagent/openai: unsupported thinking mode %q (valid: enabled, disabled)", o.Thinking)
+		}
+	}
+	return nil
 }
 
 func (m ChatModel) baseURL() string {
@@ -207,10 +248,15 @@ type chatRequest struct {
 	MaxCompletionTokens int                 `json:"max_completion_tokens,omitempty"`
 	Temperature         *float64            `json:"temperature,omitempty"`
 	Stop                []string            `json:"stop,omitempty"`
-	ReasoningEffort     string              `json:"reasoning_effort,omitempty"`
+	ReasoningEffort     ReasoningEffort     `json:"reasoning_effort,omitempty"`
+	Thinking            *chatThinking       `json:"thinking,omitempty"`
 	ResponseFormat      *chatResponseFormat `json:"response_format,omitempty"`
 	Stream              bool                `json:"stream,omitempty"`
 	StreamOptions       *chatStreamOptions  `json:"stream_options,omitempty"`
+}
+
+type chatThinking struct {
+	Type ThinkingMode `json:"type"`
 }
 
 type chatStreamOptions struct {
@@ -240,11 +286,12 @@ type chatError struct {
 }
 
 type chatMessage struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content"`
-	Name       string         `json:"name,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	ToolCalls  []chatToolCall `json:"tool_calls,omitempty"`
+	Role             string         `json:"role"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	Name             string         `json:"name,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	ToolCalls        []chatToolCall `json:"tool_calls,omitempty"`
 }
 
 type chatTool struct {
@@ -265,6 +312,26 @@ type chatStreamChunk struct {
 	Usage   *chatCompletionUsage `json:"usage"`
 }
 
+type chatCompletionResponse struct {
+	ID      string                 `json:"id"`
+	Model   string                 `json:"model"`
+	Choices []chatCompletionChoice `json:"choices"`
+	Usage   *chatCompletionUsage   `json:"usage"`
+}
+
+type chatCompletionChoice struct {
+	Index        int                   `json:"index"`
+	Message      chatCompletionMessage `json:"message"`
+	FinishReason string                `json:"finish_reason"`
+}
+
+type chatCompletionMessage struct {
+	Role             string         `json:"role"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content"`
+	ToolCalls        []chatToolCall `json:"tool_calls"`
+}
+
 type chatStreamChoice struct {
 	Index        int             `json:"index"`
 	Delta        chatStreamDelta `json:"delta"`
@@ -272,9 +339,10 @@ type chatStreamChoice struct {
 }
 
 type chatStreamDelta struct {
-	Role      string               `json:"role"`
-	Content   *string              `json:"content"`
-	ToolCalls []chatStreamToolCall `json:"tool_calls"`
+	Role             string               `json:"role"`
+	Content          *string              `json:"content"`
+	ReasoningContent *string              `json:"reasoning_content"`
+	ToolCalls        []chatStreamToolCall `json:"tool_calls"`
 }
 
 type chatStreamToolCall struct {
@@ -303,6 +371,7 @@ type chatPromptTokenDetails struct {
 
 type chatCompletionDetails struct {
 	AcceptedPredictionTokens int `json:"accepted_prediction_tokens"`
+	ReasoningTokens          int `json:"reasoning_tokens"`
 }
 
 type chatToolCall struct {
@@ -323,14 +392,22 @@ func openAIMessages(request goagent.TurnRequest) []chatMessage {
 	}
 	for _, message := range request.Messages {
 		messages = append(messages, chatMessage{
-			Role:       string(message.Role),
-			Content:    message.Content,
-			Name:       message.Name,
-			ToolCallID: message.ToolCallID,
-			ToolCalls:  openAIToolCalls(message.ToolCalls),
+			Role:             string(message.Role),
+			Content:          message.Content,
+			ReasoningContent: openAIReasoningContent(message),
+			Name:             message.Name,
+			ToolCallID:       message.ToolCallID,
+			ToolCalls:        openAIToolCalls(message.ToolCalls),
 		})
 	}
 	return messages
+}
+
+func openAIReasoningContent(message goagent.Message) string {
+	if message.Role != goagent.RoleAssistant || len(message.ToolCalls) == 0 {
+		return ""
+	}
+	return message.HiddenReasoning
 }
 
 func openAIToolCalls(calls []goagent.ToolCall) []chatToolCall {
@@ -348,6 +425,47 @@ func openAIToolCalls(calls []goagent.ToolCall) []chatToolCall {
 	return toolCalls
 }
 
+func decodeChatCompletionResponse(data []byte) (goagent.TurnResult, error) {
+	var response chatCompletionResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return goagent.TurnResult{}, fmt.Errorf("goagent/openai: decode chat completion: %w", err)
+	}
+	if len(response.Choices) != 1 {
+		return goagent.TurnResult{}, fmt.Errorf("goagent/openai: chat completion contained %d choices", len(response.Choices))
+	}
+	choice := response.Choices[0]
+	if choice.Index != 0 {
+		return goagent.TurnResult{}, fmt.Errorf("goagent/openai: unsupported completion choice index %d", choice.Index)
+	}
+	message := goagent.Message{Role: goagent.RoleAssistant, Content: choice.Message.Content, HiddenReasoning: choice.Message.ReasoningContent}
+	for _, call := range choice.Message.ToolCalls {
+		toolCall := goagent.ToolCall{ID: call.ID, Name: call.Function.Name, Input: json.RawMessage(call.Function.Arguments)}
+		if toolCall.Name == "" {
+			return goagent.TurnResult{}, errors.New("goagent/openai: completion tool call missing function name")
+		}
+		if !json.Valid(toolCall.Input) {
+			return goagent.TurnResult{}, errors.New("goagent/openai: completion tool call arguments are not valid JSON")
+		}
+		message.ToolCalls = append(message.ToolCalls, toolCall)
+	}
+	result := goagent.TurnResult{
+		Message:    message,
+		ToolCalls:  append([]goagent.ToolCall(nil), message.ToolCalls...),
+		StopReason: stopReasonFromFinish(choice.FinishReason),
+	}
+	if response.Usage != nil {
+		result.Usage = usageFromChunk(*response.Usage, response.ID, response.Model)
+	}
+	return result, nil
+}
+
+func stopReasonFromFinish(reason string) goagent.StopReason {
+	if reason == "" || reason == "stop" {
+		return goagent.StopComplete
+	}
+	return goagent.StopModelError
+}
+
 type streamState struct {
 	emit        func(goagent.Event)
 	diagnostics goagent.ProviderDiagnostics
@@ -357,6 +475,7 @@ type streamState struct {
 	finalized   bool
 	textBlockID string
 	text        strings.Builder
+	reasoning   strings.Builder
 	toolBlocks  map[int]*streamToolBlock
 	toolOrder   []int
 	usage       goagent.Usage
@@ -460,6 +579,9 @@ func (s *streamState) processRecord(lines []string) error {
 		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
 			s.textDelta(*choice.Delta.Content)
 		}
+		if choice.Delta.ReasoningContent != nil {
+			s.reasoning.WriteString(*choice.Delta.ReasoningContent)
+		}
 		for _, toolCall := range choice.Delta.ToolCalls {
 			if err := s.toolCallDelta(toolCall); err != nil {
 				return err
@@ -536,6 +658,7 @@ func (s *streamState) finalize() error {
 		return errors.New("goagent/openai: duplicate stream finish_reason")
 	}
 	message := goagent.Message{Role: goagent.RoleAssistant}
+	message.HiddenReasoning = s.reasoning.String()
 	if s.textBlockID != "" {
 		text := s.text.String()
 		message.Content = text
@@ -603,10 +726,18 @@ func usageFromChunk(usage chatCompletionUsage, requestID string, model string) g
 		TotalTokens:       usage.TotalTokens,
 		CachedInputTokens: usage.PromptTokensDetails.CachedTokens,
 		CacheWriteTokens:  usage.CompletionTokensDetails.AcceptedPredictionTokens,
+		ReasoningTokens:   usage.CompletionTokensDetails.ReasoningTokens,
 		RequestID:         requestID,
 		Provider:          providerName,
 		Model:             model,
 	}
+}
+
+func openAIThinking(mode ThinkingMode) *chatThinking {
+	if mode == "" {
+		return nil
+	}
+	return &chatThinking{Type: mode}
 }
 
 func isEventStream(contentType string) bool {
